@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "bright-lang",
+    "bright-lang-lexer",
+]
