@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 bright-lang-lexer = { path = "../bright-lang-lexer" }
+logos = "0.11.4"
