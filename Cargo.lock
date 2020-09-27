@@ -30,6 +30,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bright-lang-types"
+version = "0.1.0"
+dependencies = [
+ "serde 1.0.116 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

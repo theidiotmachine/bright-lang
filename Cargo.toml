@@ -3,4 +3,5 @@ members = [
     "bright-lang",
     "bright-lang-errs",
     "bright-lang-lexer",
+    "bright-lang-types",
 ]
