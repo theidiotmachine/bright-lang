@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "bright-lang",
+    "bright-lang-ast",
     "bright-lang-errs",
     "bright-lang-lexer",
     "bright-lang-types",

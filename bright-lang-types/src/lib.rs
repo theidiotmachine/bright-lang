@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize};
 
@@ -15,6 +16,13 @@ pub enum TypeConstraint{
     Trait(String),
     ///No condition, so accepts everything
     None
+}
+
+
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize, Hash)]
+pub struct TypeArg{
+    pub name: String,
+    pub constraint: TypeConstraint,
 }
 
 // Type of a function.
@@ -140,4 +148,68 @@ impl Display for QualifiedType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.mutability, self.r#type)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum Privacy{
+    Public, Private, Protected
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MemberFunc{
+    pub type_args: Vec<TypeArg>,
+    pub func_type: FuncType,
+    ///This is the full name with the type prefix in front of it.
+    pub mangled_name: String,
+    ///This is the name you would type.
+    pub name: String,
+    pub privacy: Privacy,
+}
+
+/// Data member of a struct.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Member{
+    pub name: String,
+    pub r#type: Type,
+    pub privacy: Privacy,
+}
+
+impl Member {
+    pub fn get_member_type_map(members: &Vec<Member>) -> HashMap<String, Type> {
+        let mut out: HashMap<String, Type> = HashMap::new();
+        for m in members {
+            out.insert(m.name.clone(), m.r#type.clone());
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum UserClassStorage{
+    Heap,
+    HeapRef,
+    Stack
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UserClass{
+    pub type_args: Vec<TypeArg>, 
+    pub member_funcs: Vec<MemberFunc>, 
+    pub constructor: Option<MemberFunc>, 
+    pub members: Vec<Member>, 
+    pub storage: UserClassStorage,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TraitMemberFunc{
+    pub trait_name: String,
+    pub type_args: Vec<TypeArg>,
+    pub func_type: FuncType,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TraitDecl{
+    pub name: String, 
+    pub member_funcs: Vec<TraitMemberFunc>, 
 }
