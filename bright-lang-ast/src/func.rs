@@ -1,3 +1,4 @@
+use crate::ClosureRef;
 use crate::expr::Arena;
 use bright_lang_types::TypeArg;
 use serde::{Serialize, Deserialize};
@@ -7,7 +8,7 @@ use bright_lang_types::{QualifiedType, FuncType};
 use std::collections::HashMap;
 
 use crate::core::VariableMutability;
-use crate::expr::{TypedExpr, NodePtr};
+use crate::expr::{NodePtr};
 
 /// Simple func arg, one with a name and a type, e.g. x: number
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -34,7 +35,7 @@ pub struct Func {
     /// Function body entry point into the arena. None if imported.
     pub body: Option<NodePtr>,
     pub local_vars: Vec<LocalVar>,
-    //pub closure: Vec<ClosureRef>,
+    pub closure: Vec<ClosureRef>,
     pub local_var_map: HashMap<String, u32>,
 }
 

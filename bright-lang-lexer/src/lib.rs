@@ -1,3 +1,4 @@
+use std::fmt;
 use logos::{Logos, Lexer};
 use unicode_segmentation::UnicodeSegmentation;
 use bright_lang_errs::source_location::SourceLocation;
@@ -65,7 +66,7 @@ enum MainToken {
     NewLine,
 
     #[regex(r"[\p{L}_][\p{L}[:digit:]_]*")]
-    Symbol,
+    Ident,
 
     #[regex(r"0x[0-9a-f_]+")]
     HexLiteral,
@@ -281,12 +282,12 @@ enum MainToken {
     Error,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token {
     ///A new line, or \n
     NewLine,
     ///A 'symbol', meaning some arbitrary text
-    Symbol,
+    Ident,
 
     HexLiteral,
 
@@ -392,6 +393,7 @@ pub enum Token {
 
     If,
 
+    /// `import` keyword
     Import,
 
     Heap,
@@ -433,6 +435,83 @@ pub enum Token {
     EOF,
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::NewLine => write!(f, "\\n"),
+            Token::Ident | Token::HexLiteral | Token::BinLiteral | Token::OctLiteral | Token::DecLiteral => write!(f, "*literal*"),
+            Token::And => write!(f, "&&"),
+            Token::Assign => write!(f, "="),
+            Token::Colon => write!(f, ":"),
+            Token::Comma => write!(f, ","),
+            Token::Divide => write!(f, "/"),
+            Token::Dot => write!(f, "."),
+            Token::Equal => write!(f, "=="),
+            Token::Error => write!(f, "*error*"),
+            Token::FatArrow => write!(f, "=>"),
+            Token::GreaterThan => write!(f, "="),
+            Token::Intersection => write!(f, "&"),
+            Token::LessThan => write!(f, "<"),
+            Token::Minus => write!(f, "-"),
+            Token::Multiply => write!(f, "*"),
+            Token::Not => write!(f, "!"),
+            Token::NotEqual => write!(f, "!="),
+            Token::Or => write!(f, "||"),
+            Token::Plus => write!(f, "+"),
+            Token::RoundOpen => write!(f, "("),
+            Token::RoundClose => write!(f, ")"),
+            Token::SquareOpen => write!(f, "["),
+            Token::SquareClose => write!(f, "]"),
+            Token::SquigglyOpen => write!(f, r"{{"),
+            Token::SquigglyClose => write!(f, r"}}"),
+            Token::Semicolon => write!(f, ";"),
+            Token::StringLiteral => write!(f, "string literal"),
+            Token::ThinArrow => write!(f, "->"),
+            Token::Union => write!(f, "&"),
+            Token::Bool => write!(f, "Bool"),
+            Token::False => write!(f, "False"),
+            Token::Int => write!(f, "Int"),
+            Token::Never => write!(f, "Never"),
+            Token::Number => write!(f, "Number"),
+            Token::True => write!(f, "True"),
+            Token::Unknown => write!(f, "Unknown"),
+            Token::Void => write!(f, "Void"),
+            Token::As => write!(f, "as"),
+            Token::Break => write!(f, "break"),
+            Token::Class => write!(f, "class"),
+            Token::Continue => write!(f, "continue"),
+            Token::Else => write!(f, "else"),
+            Token::Enum => write!(f, "enum"),
+            Token::Export => write!(f, "export"),
+            Token::Extends => write!(f, "extends"),
+            Token::Fn => write!(f, "fn"),
+            Token::For => write!(f, "for"),
+            Token::From => write!(f, "from"),
+            Token::If => write!(f, "if"),
+            Token::Import => write!(f, "import"),
+            Token::Heap => write!(f, "heap"),
+            Token::Implements => write!(f, "implements"),
+            Token::Interface => write!(f, "interface"),
+            Token::Let => write!(f, "let"),
+            Token::Mut => write!(f, "mut"),
+            Token::Of => write!(f, "of"),
+            Token::Private=> write!(f, "private"),
+            Token::Public => write!(f, "public"),
+            Token::Ptr => write!(f, "ptr"),
+            Token::Ref => write!(f, "ref"),
+            Token::Return => write!(f, "return"),
+            Token::Shared => write!(f, "shared"),
+            Token::Stack => write!(f, "stack"),
+            Token::Switch => write!(f, "switch"),
+            Token::This => write!(f, "this"),
+            Token::Trait => write!(f, "trait"),
+            Token::Var => write!(f, "var"),
+            Token::While => write!(f, "while"),
+            Token::EOF => write!(f, "EOF"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct TokenData{
     pub token: Token,
@@ -440,17 +519,26 @@ pub struct TokenData{
     pub text: Option<String>,
 }
 
+impl fmt::Display for TokenData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.token {
+            Token::Ident | Token::HexLiteral | Token::BinLiteral | Token::OctLiteral 
+                | Token::DecLiteral | Token::Error | Token::StringLiteral => write!(f, "{}", self.text.clone().unwrap()),
+            _ => self.token.fmt(f),
+        }
+    }
+}
 
 enum Modes<'a> {
-    MainToken(Lexer<'a, MainToken>),
-    StringToken(Lexer<'a, StringToken>),
-    MultiLineCommentToken(Lexer<'a, MultiLineCommentToken>),
-    SingleLineCommentToken(Lexer<'a, SingleLineCommentToken>),
+    Main(Lexer<'a, MainToken>),
+    String(Lexer<'a, StringToken>),
+    MultiLineComment(Lexer<'a, MultiLineCommentToken>),
+    SingleLineComment(Lexer<'a, SingleLineCommentToken>),
 }
 
 impl<'a> Modes<'a> {
     fn new(s: &'a str) -> Self {
-        Self::MainToken(MainToken::lexer(s))
+        Self::Main(MainToken::lexer(s))
     }
 }
 
@@ -473,18 +561,17 @@ impl<'a> BrightLexer<'a> {
 
     fn skip_ml_comment(&mut self) {
         match &mut self.mode {
-            Modes::MultiLineCommentToken(t) => {
+            Modes::MultiLineComment(t) => {
                 loop {
                     let r = t.next();
                     match r {
                         //EOF so bail
                         None => {
-                            self.mode = Modes::MainToken(t.to_owned().morph());
+                            self.mode = Modes::Main(t.to_owned().morph());
                             return;
                         },
                         Some(MultiLineCommentToken::AllTheThings) => {
                             let c = t.slice().graphemes(true).count();
-                            println!("*_* count {}", c);
                             self.col_number += c;
                         },
                         //not sure what to do here.
@@ -495,7 +582,7 @@ impl<'a> BrightLexer<'a> {
                             self.col_number += 2;
                             self.ml_depth -= 1;
                             if self.ml_depth == 0 {
-                                self.mode = Modes::MainToken(t.to_owned().morph());
+                                self.mode = Modes::Main(t.to_owned().morph());
                                 return;
                             }
                         },
@@ -516,13 +603,13 @@ impl<'a> BrightLexer<'a> {
 
     fn skip_sl_comment(&mut self) {
         match &mut self.mode {
-            Modes::SingleLineCommentToken(t) => {
+            Modes::SingleLineComment(t) => {
                 loop {
                     let r = t.next();
                     match r {
                         //EOF so bail
                         None => {
-                            self.mode = Modes::MainToken(t.to_owned().morph());
+                            self.mode = Modes::Main(t.to_owned().morph());
                             return;
                         },
                         Some(SingleLineCommentToken::AllTheThings) => {
@@ -535,7 +622,7 @@ impl<'a> BrightLexer<'a> {
                         Some(SingleLineCommentToken::NewLine) => {
                             self.line_number += 1;
                             self.col_number = 1;
-                            self.mode = Modes::MainToken(t.to_owned().morph());
+                            self.mode = Modes::Main(t.to_owned().morph());
                             return;
                         }
                     }
@@ -550,13 +637,13 @@ impl<'a> BrightLexer<'a> {
         let mut loc = SourceLocation::new_start_line_col(line_number, col_number);
 
         match &mut self.mode {
-            Modes::StringToken(t) => {
+            Modes::String(t) => {
                 loop {
                     let r = t.next();
                     match r {
                         None => {
                             //EOF so bail
-                            self.mode = Modes::MainToken(t.to_owned().morph());
+                            self.mode = Modes::Main(t.to_owned().morph());
                             return TokenData{token: Token::StringLiteral, loc, text: Some(text)};
                         },
                         Some(StringToken::AllTheThings) => {
@@ -568,7 +655,7 @@ impl<'a> BrightLexer<'a> {
                             //some error, so just return what we have
                             self.col_number += t.slice().graphemes(true).count();
                             loc.extend_end_line_col(self.line_number, self.col_number);
-                            self.mode = Modes::MainToken(t.to_owned().morph());
+                            self.mode = Modes::Main(t.to_owned().morph());
                             return TokenData{token: Token::StringLiteral, loc, text: Some(text)};
                         },
                         Some(StringToken::EscapedQuote) => {
@@ -584,7 +671,7 @@ impl<'a> BrightLexer<'a> {
                             //we're done here
                             self.col_number += 1;
                             loc.extend_end_line_col(self.line_number, self.col_number);
-                            self.mode = Modes::MainToken(t.to_owned().morph());
+                            self.mode = Modes::Main(t.to_owned().morph());
                             return TokenData{token: Token::StringLiteral, loc, text: Some(text)};
                         },
                     }
@@ -598,7 +685,7 @@ impl<'a> BrightLexer<'a> {
     pub fn next(&mut self) -> TokenData {
         loop {
             match &mut self.mode {
-                Modes::MainToken(t) => {
+                Modes::Main(t) => {
                     let r = t.next();
                     let slice = t.slice();
                     let line_number = self.line_number;
@@ -683,7 +770,7 @@ impl<'a> BrightLexer<'a> {
                         Some(MainToken::Minus) => 
                             return TokenData{token: Token::Minus, loc, text: None},
                         Some(MainToken::MultiLineCommentOpen) => {
-                            self.mode = Modes::MultiLineCommentToken(t.to_owned().morph());
+                            self.mode = Modes::MultiLineComment(t.to_owned().morph());
                             self.ml_depth = 1;
                         },
                         Some(MainToken::Multiply) => 
@@ -731,10 +818,10 @@ impl<'a> BrightLexer<'a> {
                         Some(MainToken::Shared) => 
                             return TokenData{token: Token::Shared, loc, text: None},
                         Some(MainToken::SingleLineComment) => {
-                            self.mode = Modes::SingleLineCommentToken(t.to_owned().morph());
+                            self.mode = Modes::SingleLineComment(t.to_owned().morph());
                         },
                         Some(MainToken::SingleQuote) => {
-                            self.mode = Modes::StringToken(t.to_owned().morph());
+                            self.mode = Modes::String(t.to_owned().morph());
                             return self.get_string_token(line_number, col_number);
                         },
                         Some(MainToken::SquareClose) => 
@@ -749,8 +836,8 @@ impl<'a> BrightLexer<'a> {
                             return TokenData{token: Token::Stack, loc, text: None},
                         Some(MainToken::Switch) => 
                             return TokenData{token: Token::Switch, loc, text: None},
-                        Some(MainToken::Symbol) => 
-                            return TokenData{token: Token::Symbol, loc, text: Some(String::from(slice))},
+                        Some(MainToken::Ident) => 
+                            return TokenData{token: Token::Ident, loc, text: Some(String::from(slice))},
                         Some(MainToken::ThinArrow) => 
                             return TokenData{token: Token::ThinArrow, loc, text: None},
                         Some(MainToken::This) => 
@@ -772,13 +859,13 @@ impl<'a> BrightLexer<'a> {
                         Some(MainToken::WhiteSpace) => {}
                     }
                 },
-                Modes::StringToken(_) => {
+                Modes::String(_) => {
                     unreachable!();
                 },
-                Modes::MultiLineCommentToken(_) => {
+                Modes::MultiLineComment(_) => {
                     self.skip_ml_comment();
                 },
-                Modes::SingleLineCommentToken(_) => {
+                Modes::SingleLineComment(_) => {
                     self.skip_sl_comment();
                 }
             }
@@ -796,10 +883,10 @@ mod tests {
         assert_eq!(lex.next(), Some(MainToken::Fn));
         assert_eq!(lex.span(), 0..2);
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.slice(), "hello");
         assert_eq!(lex.next(), Some(MainToken::RoundOpen));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.slice(), "Привет");
         assert_eq!(lex.next(), Some(MainToken::Colon));
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
@@ -850,10 +937,10 @@ mod tests {
         use super::*;
         let mut lex = MainToken::lexer("{a; b\n}");
         assert_eq!(lex.next(), Some(MainToken::SquigglyOpen));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.next(), Some(MainToken::Semicolon));
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.next(), Some(MainToken::NewLine));
         assert_eq!(lex.next(), Some(MainToken::SquigglyClose));
     }
@@ -872,7 +959,7 @@ mod tests {
         assert_eq!(s_lexer.next(), Some(StringToken::SingleQuote));
         lex = s_lexer.morph();
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.slice(), "yay");
     }
 
@@ -880,14 +967,14 @@ mod tests {
     fn sl_comment() {
         use super::*;
         let mut lex = MainToken::lexer("oops //all the // rest\n yay");
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
         assert_eq!(lex.next(), Some(MainToken::SingleLineComment));
         let mut sl_lexer = lex.morph::<SingleLineCommentToken>();
         assert_eq!(sl_lexer.next(), Some(SingleLineCommentToken::NewLine));
         lex = sl_lexer.morph();
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.slice(), "yay");
     }
 
@@ -896,7 +983,7 @@ mod tests {
         use super::*;
 
         let mut lex = MainToken::lexer("oops /*all the /*rest*/ */ yay");
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
         assert_eq!(lex.next(), Some(MainToken::MultiLineCommentOpen));
         let mut ml_lexer = lex.morph::<MultiLineCommentToken>();
@@ -905,7 +992,7 @@ mod tests {
         assert_eq!(ml_lexer.next(), Some(MultiLineCommentToken::MultiLineCommentClose));
         lex = ml_lexer.morph();
         assert_eq!(lex.next(), Some(MainToken::WhiteSpace));
-        assert_eq!(lex.next(), Some(MainToken::Symbol));
+        assert_eq!(lex.next(), Some(MainToken::Ident));
         assert_eq!(lex.slice(), "yay");
     }
 

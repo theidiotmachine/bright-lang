@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::collections::HashMap;
+use std::iter::FromIterator;
 
 use serde::{Serialize, Deserialize};
 
@@ -18,6 +20,61 @@ pub enum TypeConstraint{
     None
 }
 
+///This from [https://stackoverflow.com/questions/40718975/how-to-get-every-subset-of-a-vector-in-rust]
+fn generate_power_set<T>(s: &[T]) -> Vec<Vec<T>> where T: Clone {
+    (0..2usize.pow(s.len() as u32)).map(|i| {
+         s.iter().enumerate().filter(|&(t, _)| (i >> t) % 2 == 1)
+                             .map(|(_, element)| element.clone())
+                             .collect()
+     }).collect()
+}   
+
+impl TypeConstraint{
+    ///whether or not this adheres to a marker trait
+    pub fn contains_trait(&self, t: &str) -> bool {
+        match self {
+            TypeConstraint::Union(inner) => inner.iter().all(|x| x.contains_trait(t)),
+            TypeConstraint::Intersection(inner) => inner.iter().any(|x| x.contains_trait(t)),
+            TypeConstraint::Trait(i) => i == t,
+            TypeConstraint::None => false
+        }
+    }
+
+    pub fn get_all_contained_traits(&self) -> Vec<String> {
+        match self {
+            TypeConstraint::Union(inner) | TypeConstraint::Intersection(inner) => inner.iter().flat_map(|x| x.get_all_contained_traits()).collect(),
+            TypeConstraint::Trait(i) => vec![i.clone()],
+            TypeConstraint::None => vec![]
+        }
+    }
+
+    pub fn conforms_to_trait_set(&self, ts: &HashSet<String>) -> bool {
+        match self{
+            TypeConstraint::Union(inner) => inner.iter().any(|x| x.conforms_to_trait_set(ts)),
+            TypeConstraint::Intersection(inner) => inner.iter().all(|x| x.conforms_to_trait_set(ts)),
+            TypeConstraint::Trait(i) => ts.contains(i),
+            TypeConstraint::None => false
+        }
+    }
+
+    ///Whether this is a subset of another trait. This is super expensive at the moment. I need some CS-hammer to optimise it. It basically
+    /// goes through every combination of traits possible that this constraint conforms to, and checks that they are conformed to in the 
+    /// other
+    pub fn is_subset_of(&self, other: &TypeConstraint) -> bool {
+        //first get all the contained traits of this
+        let self_contained_traits = self.get_all_contained_traits();
+
+        //now work through every combination of traits. If it's legitimate for this, it must be legitimate for the other
+        let power_set = generate_power_set(&self_contained_traits);
+        for s in power_set {
+            let hs = HashSet::from_iter(s);
+            if self.conforms_to_trait_set(&hs) && !other.conforms_to_trait_set(&hs) {
+                return false;
+            }
+        }
+        true
+    }
+}
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct TypeArg{
@@ -84,20 +141,50 @@ pub enum Type {
     Void,
 }
 
-fn display_types(types: &Vec<Type>)->String{
-    let mut vec: Vec<String> = vec![];
-    for inner in types {
-        vec.push(format!("{}", inner));
+impl Type{
+    pub fn display_types(types: &[Type])->String{
+        let mut vec: Vec<String> = vec![];
+        for inner in types {
+            vec.push(format!("{}", inner));
+        }
+        vec.join(",")
     }
-    vec.join(",")
+
+    pub fn get_type_name(&self) -> String{
+        match self {
+            Type::Bool => String::from("Bool"),
+            Type::Enum{name, type_args: _} => name.clone(),
+            Type::EnumMember{enum_name, member_name, enum_type_args: _} => {format!("{}.{}", enum_name, member_name)},
+            Type::FloatLiteral(_) => String::from("FloatLiteral"),
+            Type::Func{func_type} => {
+                let in_names: Vec<String> = func_type.in_types.iter().map(|x| x.r#type.get_type_name()).collect();
+                let out_name = func_type.out_type.r#type.get_type_name();
+                format!("Fn ({}) -> {}", in_names.join(", "), out_name)
+            },
+            Type::Int(_, _) => String::from("Int"),
+            Type::Never => String::from("Never"),
+            Type::Number => String::from("Number"),
+            Type::ModuleLiteral(_) => String::from("ModuleLiteral"),
+            Type::String => String::from("String"),
+            Type::StringLiteral(_) => String::from("StringLiteral"),
+            Type::Tuple(_) => String::from("Tuple"),
+            Type::TypeLiteral(_) => String::from("TypeLiteral"),
+            Type::Undeclared => String::from("Undeclared"),
+            Type::Unknown => String::from("Unknown"),
+            Type::UnsafeArray(_) => String::from("__Array"),
+            Type::UserClass{name, type_args: _} => name.clone(),
+            Type::VariableUsage{name, constraint: _} => name.clone(),
+            Type::Void => String::from("Void"),
+        }
+    }
 }
 
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Type::Bool => write!(f, "Bool"),
-            Type::Enum{name, type_args} => write!(f, "{}<{}>", name, display_types(type_args)),
-            Type::EnumMember{enum_name, member_name, enum_type_args} => write!(f, "{}<{}>.{}", enum_name, display_types(enum_type_args), member_name),
+            Type::Enum{name, type_args} => write!(f, "{}<{}>", name, Type::display_types(type_args)),
+            Type::EnumMember{enum_name, member_name, enum_type_args} => write!(f, "{}<{}>.{}", enum_name, Type::display_types(enum_type_args), member_name),
             Type::FloatLiteral(n) => write!(f, "{}", n),
             Type::Func{func_type} => write!(f, "{}", func_type),
             Type::Int(lower, upper) => write!(f, "Int<{}, {}>", lower, upper),
@@ -106,12 +193,12 @@ impl Display for Type {
             Type::Number => write!(f, "Number"),
             Type::String => write!(f, "String"),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
-            Type::Tuple(types) => write!(f, "Tuple<{}>", display_types(types)),
+            Type::Tuple(types) => write!(f, "Tuple<{}>", Type::display_types(types)),
             Type::TypeLiteral(t) => write!(f, "type: {}", t),
             Type::Undeclared => write!(f, "Undeclared"),
             Type::Unknown => write!(f, "Unknown"),
             Type::UnsafeArray(t) => write!(f, "__Array<{}>", t),
-            Type::UserClass{name, type_args} => write!(f, "{}<{}>", name, display_types(type_args)),
+            Type::UserClass{name, type_args} => write!(f, "{}<{}>", name, Type::display_types(type_args)),
             Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
             Type::Void => write!(f, "Void"),
             
@@ -124,7 +211,8 @@ impl Display for Type {
 pub enum Mutability {
     Const,
     Mut,
-    MutRef
+    MutRef,
+    Unknown
 }
 
 impl Display for Mutability {
@@ -133,6 +221,7 @@ impl Display for Mutability {
             Mutability::Const => write!(f, ""),
             Mutability::Mut => write!(f, "mut"),
             Mutability::MutRef => write!(f, "mut ref"),
+            Mutability::Unknown => write!(f, "?"),
         }
     }
 }
@@ -142,6 +231,24 @@ impl Display for Mutability {
 pub struct QualifiedType{
     pub r#type: Type,
     pub mutability: Mutability,
+}
+
+impl QualifiedType {
+    /*
+    pub fn get_pass_style(&self) -> PassStyle{ 
+        self.r#type.get_pass_style()
+    }
+    */
+
+    pub fn new(t: &Type, m: Mutability) -> QualifiedType  { 
+        QualifiedType {r#type: t.clone(), mutability: m }
+    }
+    pub fn new_const(t: &Type) -> QualifiedType { 
+        QualifiedType {r#type: t.clone(), mutability: Mutability::Const }
+    }
+    pub fn new_mut(t: &Type) -> QualifiedType { 
+        QualifiedType {r#type: t.clone(), mutability: Mutability::Mut}
+    }
 }
 
 impl Display for QualifiedType {
@@ -175,7 +282,7 @@ pub struct Member{
 }
 
 impl Member {
-    pub fn get_member_type_map(members: &Vec<Member>) -> HashMap<String, Type> {
+    pub fn get_member_type_map(members: &[Member]) -> HashMap<String, Type> {
         let mut out: HashMap<String, Type> = HashMap::new();
         for m in members {
             out.insert(m.name.clone(), m.r#type.clone());

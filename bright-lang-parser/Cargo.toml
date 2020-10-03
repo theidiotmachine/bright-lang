@@ -1,0 +1,11 @@
+[package]
+name = "bright-lang-parser"
+version = "0.1.0"
+authors = ["theidiotmachine <dinsdt@googlemail.com>"]
+edition = "2018"
+
+[dependencies]
+bright-lang-ast = { path = "../bright-lang-ast" }
+bright-lang-errs = { path = "../bright-lang-errs" }
+bright-lang-lexer = { path = "../bright-lang-lexer" }
+bright-lang-types = { path = "../bright-lang-types" }

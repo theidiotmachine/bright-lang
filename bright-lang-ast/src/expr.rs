@@ -1,3 +1,4 @@
+use crate::ClosureRef;
 use bright_lang_types::TraitMemberFunc;
 use bright_lang_types::Type;
 use serde::{Serialize, Deserialize};
@@ -53,7 +54,7 @@ pub enum AssignmentOperator{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FuncObjectCreation {
     pub name: String,
-    //pub closure: Vec<ClosureRef>
+    pub closure: Vec<ClosureRef>
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -75,6 +76,14 @@ pub struct ObjectLiteralElem{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub struct NodePtr{
     pub p: usize
+}
+
+impl NodePtr{
+    pub fn new(p: usize) -> NodePtr {
+        NodePtr{p}
+    }
+
+    const NULL: NodePtr = NodePtr{p: usize::MAX};
 }
 
 /// Something that returns something. This is really an RValue.
@@ -101,8 +110,6 @@ pub enum Expr {
     Constructor{r#type: QualifiedType, args: Vec<ObjectLiteralElem>},
     /// continue
     Continue,
-    /// Block end. Part of the IR, not turned into WASM
-    End,
     /// A deep copy. May be elided out.
     DeepCopy{expr: NodePtr},
     /// Member of a thing, such as a[b]
@@ -206,13 +213,35 @@ pub enum ReturnExpr {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Arena{
-    pub a: Vec<TypedExpr>
+    pub a: Vec<TypedExpr>,
+}
+
+impl Default for Arena {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Arena{
-    pub fn set_return_expr(&mut self, p: NodePtr, return_expr: ReturnExpr) -> () {
+    pub fn new() -> Arena {
+        Arena{a: vec![]}
+    }
+
+    pub fn new_block(loc: SourceLocation) -> Arena {
+        Arena{a: vec![
+            TypedExpr{
+                expr: Expr::Block{first: NodePtr::NULL, last: NodePtr::NULL},
+                loc,
+                next: NodePtr::NULL,
+                return_expr: ReturnExpr::None,
+                r#type: QualifiedType::new_const(&Type::Undeclared)
+            }
+        ]}
+    }
+
+    pub fn set_return_expr(&mut self, p: NodePtr, return_expr: ReturnExpr)  {
         match self.a[p.p].expr {
-            Expr::Block{first: first, last: last} => {
+            Expr::Block{first: _, last} => {
                 self.set_return_expr(last, return_expr);
             },
             Expr::IfThenElse{cond: _, then: tte, r#else: ete} => {
@@ -223,6 +252,32 @@ impl Arena{
         }
         self.a[p.p].return_expr = return_expr;
     }
+
+    pub fn push_to_block(&mut self, block_ptr: NodePtr, te: &TypedExpr) {
+        let len = self.a.len();
+
+        let block_expr = &self.a[block_ptr.p].expr;
+        let (first, last) = match block_expr {
+            Expr::Block{first, last} => {
+                let first = if *first == NodePtr::NULL {
+                    NodePtr::new(len)
+                } else {
+                    *first
+                };
+                
+                (first, *last)
+            },
+            _ => unreachable!()
+        };
+
+        if last != NodePtr::NULL {
+            self.a[last.p].next = NodePtr::new(len);
+        }
+        self.a[block_ptr.p].expr = Expr::Block{first, last: NodePtr::new(len)};
+        self.a[block_ptr.p].loc.extend_end_position(te.loc.end);
+        self.a[block_ptr.p].r#type = te.r#type.clone();
+        self.a.push(te.clone());
+    }
 }
 
 /// The main expression class.
@@ -232,10 +287,22 @@ pub struct TypedExpr{
     pub r#type: QualifiedType,
     pub loc: SourceLocation,
     pub return_expr: ReturnExpr,
-    pub next: usize,
+    pub next: NodePtr,
 }
 
 impl TypedExpr{
+    pub fn new(expr: &Expr,
+        r#type: &QualifiedType,
+        loc: SourceLocation
+    ) -> TypedExpr {
+        TypedExpr {
+            expr: expr.clone(), 
+            r#type: r#type.clone(), 
+            loc, return_expr: ReturnExpr::None, 
+            next: NodePtr::NULL
+        } 
+    }
+
     pub fn type_is_const(&self) -> bool {
         self.r#type.mutability == Mutability::Const
     }

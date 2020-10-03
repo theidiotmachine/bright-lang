@@ -26,6 +26,7 @@ dependencies = [
 name = "bright-lang-errs"
 version = "0.1.0"
 dependencies = [
+ "bright-lang-types 0.1.0",
  "serde 1.0.116 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -36,6 +37,16 @@ dependencies = [
  "bright-lang-errs 0.1.0",
  "logos 0.11.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-segmentation 1.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "bright-lang-parser"
+version = "0.1.0"
+dependencies = [
+ "bright-lang-ast 0.1.0",
+ "bright-lang-errs 0.1.0",
+ "bright-lang-lexer 0.1.0",
+ "bright-lang-types 0.1.0",
 ]
 
 [[package]]

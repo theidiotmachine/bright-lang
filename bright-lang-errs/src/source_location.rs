@@ -51,6 +51,9 @@ impl SourceLocation {
         self.end = Position::new(end_line, end_column);
     }
 
+    pub fn extend_end_position(&mut self, end_position: Position) {
+        self.end = end_position;
+    }
 }
 
 impl ::std::fmt::Display for SourceLocation {
