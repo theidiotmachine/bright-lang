@@ -528,6 +528,23 @@ impl fmt::Display for TokenData {
         }
     }
 }
+use std::str::FromStr;
+
+impl TokenData {
+    pub fn parse_i128(&self) -> Result<i128, <i128 as FromStr>::Err> {
+        match self.token {
+            Token::DecLiteral => self.text.as_ref().unwrap().parse(),
+            Token::HexLiteral => u128::from_str_radix(self.text.as_ref().unwrap().trim_start_matches("0x"), 16).map(|i| i as i128),
+            Token::OctLiteral => u128::from_str_radix(self.text.as_ref().unwrap().trim_start_matches("0o"), 8).map(|i| i as i128),
+            Token::BinLiteral => u128::from_str_radix(self.text.as_ref().unwrap().trim_start_matches("0b"), 2).map(|i| i as i128),
+            _ => unreachable!()
+        }
+    }
+
+    pub fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err> {
+        (self.text.as_ref().unwrap()).as_str().parse()
+    }
+}
 
 enum Modes<'a> {
     Main(Lexer<'a, MainToken>),

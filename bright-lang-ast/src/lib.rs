@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use crate::expr::Arena;
 use bright_lang_types::TraitDecl;
 use crate::core::VariableMutability;
-use crate::expr::NodePtr;
+use crate::expr::NodeIdx;
 use bright_lang_types::UserClass;
 use bright_lang_types::MemberFunc;
 use bright_lang_types::Type;
@@ -53,7 +53,7 @@ pub enum TypeDecl{
 pub struct GlobalVariableDecl {
     pub name: String,
     pub r#type: QualifiedType,
-    pub init: Option<NodePtr>,
+    pub init: Option<NodeIdx>,
     pub arena: Arena,
     pub export: bool,
     pub mutability: VariableMutability,

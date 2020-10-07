@@ -9,7 +9,7 @@ use bright_lang_errs::Error;
 use crate::ImportFilter;
 use crate::Importer;
 use crate::ParserContext;
-use bright_lang_lexer::{Token, TokenData, BrightLexer};
+use bright_lang_lexer::{Token};
 use crate::BrightParser;
 
 impl<'a> BrightParser<'a> {
@@ -79,13 +79,13 @@ impl<'a> BrightParser<'a> {
             }
 
             for f in &exports.generic_func_decls {
-                let import_name = format!("{}.{}", namespace, f.func.decl.name);
+                let import_name = format!("{}.{}", namespace, f.func.defn.name);
                 parser_context.generic_func_decls.push(
                     GenericFunc{type_args: f.type_args.clone(), num_this_type_args: f.num_this_type_args, func: Func{
-                        decl: FuncDefn{name: import_name.clone(), return_type: f.func.decl.return_type.clone(), 
-                            args: f.func.decl.args.clone(), export: false, generic_impl: false, 
+                        defn: FuncDefn{name: import_name.clone(), return_type: f.func.defn.return_type.clone(), 
+                            args: f.func.defn.args.clone(), export: false, generic_impl: false, 
                             //type_guard: f.func.decl.type_guard.clone(),
-                            member_func: f.func.decl.member_func},
+                            member_func: f.func.defn.member_func},
                         arena: f.func.arena.clone(),
                         body: f.func.body,
                         local_vars: f.func.local_vars.clone(),
@@ -111,12 +111,47 @@ impl<'a> BrightParser<'a> {
         }
     }
 
+    /// This is for parsing an export declaration. We require these to be in module root, 
+    /// and therefore we also pick up the baggage about 'fake' function contexts and init_body
+    /// It's not brilliant, this code. It has a lot of baggage that could be removed
+    fn parse_export_decl_main_phase(&mut self, 
+        arena: &mut Arena,
+        fake_parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) {
+        self.skip_next_item();
+        let next = self.peek_next_item();
+        let tok = next.token;
+        match &tok {
+            Token::Fn => {
+                self.parse_function_decl_main_phase(true, arena, fake_parser_func_context, parser_context);
+            },
+            /*
+            Token::Keyword(ref k) => match k {
+                
+                Keyword::Let => {
+                    let var_decl = self.parse_variable_decl(true, true, fake_parser_func_context, parser_context);
+                    init_body.push(var_decl);
+                },
+                Keyword::UnsafeStruct => self.parse_struct_decl(true, parser_context),
+                Keyword::Alias => self.parse_alias(true, parser_context),
+                Keyword::Trait => self.parse_trait_decl(true, parser_context),
+                Keyword::Type => self.parse_trait_decl(true, parser_context),
+                Keyword::Implement => self.parse_trait_impl(true, ParserPhase::MainPhase, parser_context),
+                _ => parser_context.errors.push(Error::UnexpectedToken(next.location.clone(), String::from("Can only export functions, variables, or types")))
+            },
+            */
+            _ => parser_context.errors.push(Error::UnexpectedToken(next.loc, String::from("Can only export functions, variables, or types")))
+        }
+        
+    }
+
     /// The root of the module is parsed and will run in its 'start' function.
     /// This parses that. The init_body param is that function body. 
     /// Because we put restrictions on this function - it can't have locals or a closure - 
     /// we fake that and will blow up if it violates that. 
     pub (crate) fn parse_global_statement(&mut self, 
-        init_body: &mut Arena,
+        arena: &mut Arena,
         fake_parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
         importer: &mut dyn Importer,
@@ -125,10 +160,10 @@ impl<'a> BrightParser<'a> {
         let token = &next.token;
         
         match token {
+            Token::Export => self.parse_export_decl_main_phase(arena, fake_parser_func_context, parser_context),
             Token::Import => {self.parse_import_decl(parser_context, importer);}
             /*
             Token::Keyword(ref k) => match k {
-                Keyword::Export => self.parse_export_decl_main_phase(init_body, fake_parser_func_context, parser_context),
                 Keyword::Fn => {
                     let o_func = self.parse_function_decl_main_phase(false, fake_parser_func_context, parser_context);
                     if let Some(f) = o_func { init_body.push(f) };

@@ -1,14 +1,12 @@
-use bright_lang_ast::func::GenericFunc;
-use bright_lang_ast::GlobalVariableImport;
 use bright_lang_ast::Exports;
 use crate::context::ParserFuncContext;
-use bright_lang_ast::expr::NodePtr;
+use bright_lang_ast::expr::NodeIdx;
 use bright_lang_ast::expr::TypedExpr;
 use std::collections::HashSet;
 use std::collections::HashMap;
 use std::cmp;
 
-use bright_lang_ast::expr::{Arena, Expr};
+use bright_lang_ast::expr::{Arena};
 use bright_lang_errs::source_location::Position;
 use bright_lang_errs::source_location::SourceLocation;
 use bright_lang_types::QualifiedType;
@@ -22,7 +20,19 @@ use bright_lang_lexer::{Token, TokenData, BrightLexer};
 
 mod context;
 mod top_level;
+mod func;
+mod r#type;
+mod op;
+mod expr;
+mod cast;
+
 use crate::context::ParserContext;
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+enum ParserPhase{
+    ExportsPhase,
+    MainPhase
+}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum UnsafeParseMode{
@@ -31,8 +41,16 @@ pub enum UnsafeParseMode{
     ExportsPhase,
 }
 
+/// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we
+/// must succeed)
+#[derive(Debug, PartialEq)]
+pub enum Commitment{
+    Speculative,
+    Committed
+}
+
 pub trait Importer{
-    fn import(&mut self, import_path_name: &String, from_path_name: &String) -> Result<Imports, String>;
+    fn import(&mut self, import_path_name: &str, from_path_name: &str) -> Result<Imports, String>;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,8 +103,19 @@ impl<'a> BrightParser<'a>{
         self.look_ahead.clone()
     }
 
+    /// Peek at the next location, without changing state.
+    fn peek_next_location(& self) -> SourceLocation {
+        self.look_ahead.loc
+    }
+
     fn skip_next_item(&mut self)  {
         self.look_ahead = self.lexer.next()
+    }
+
+    fn next_item(&mut self) -> TokenData {
+        let out = self.peek_next_item();
+        self.skip_next_item();
+        out
     }
 
     fn expect_token(&mut self, token: Token, parser_context: &mut ParserContext){
@@ -103,6 +132,18 @@ impl<'a> BrightParser<'a>{
         let token = next.token; 
         match token {
             Token::StringLiteral => next.text.unwrap(),   
+            _ => {
+                parser_context.push_err(Error::UnexpectedToken(next.loc, message.to_string()));
+                String::from("")
+            }
+        }
+    }
+
+    pub (crate) fn expect_ident(&mut self, message: &str, parser_context: &mut ParserContext) -> String {
+        let next = self.peek_next_item();
+        let token = next.token; 
+        match token {
+            Token::Ident => next.text.unwrap(),
             _ => {
                 parser_context.push_err(Error::UnexpectedToken(next.loc, message.to_string()));
                 String::from("")
@@ -160,7 +201,7 @@ impl<'a> BrightParser<'a>{
         }
 
         let start_function = Func{ 
-            decl: FuncDefn{
+            defn: FuncDefn{
                 name: start_func_name.to_owned(), 
                 return_type: QualifiedType::new_const(&Type::Void), 
                 args: vec![], 
@@ -170,7 +211,7 @@ impl<'a> BrightParser<'a>{
                 member_func: false,
             },
             arena: init_body,
-            body: Some(NodePtr::new(0)),
+            body: Some(NodeIdx::new(0)),
             local_vars: vec![], 
             closure: vec![], 
             local_var_map: HashMap::new()
@@ -191,7 +232,7 @@ mod tests {
     }
 
     impl Importer for DummyImporter{
-        fn import(&mut self, _: &String, _: &String) -> Result<Imports, String> {
+        fn import(&mut self, _: &str, _: &str) -> Result<Imports, String> {
             Ok(Imports{exports: Exports::new(), module_name: String::from(""), unique_name: String::from("")})
         }
     }

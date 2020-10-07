@@ -8,7 +8,7 @@ use bright_lang_types::{QualifiedType, FuncType};
 use std::collections::HashMap;
 
 use crate::core::VariableMutability;
-use crate::expr::{NodePtr};
+use crate::expr::{NodeIdx};
 
 /// Simple func arg, one with a name and a type, e.g. x: number
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -30,10 +30,10 @@ pub struct LocalVar{
 /// Function definition
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Func {
-    pub decl: FuncDefn,
+    pub defn: FuncDefn,
     pub arena: Arena,
     /// Function body entry point into the arena. None if imported.
-    pub body: Option<NodePtr>,
+    pub body: Option<NodeIdx>,
     pub local_vars: Vec<LocalVar>,
     pub closure: Vec<ClosureRef>,
     pub local_var_map: HashMap<String, u32>,
@@ -68,7 +68,7 @@ impl FuncDefn{
 /// A generic function that consumes type arguments and can generate a concrete function
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct GenericFunc{
-    pub num_this_type_args: u32,
+    pub num_this_type_args: usize,
     pub type_args: Vec<TypeArg>,
     pub func: Func
 }

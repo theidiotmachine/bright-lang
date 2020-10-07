@@ -6,6 +6,13 @@ use std::iter::FromIterator;
 
 use serde::{Serialize, Deserialize};
 
+pub const S_64_MAX: i128 = 9_223_372_036_854_775_807;
+pub const S_64_MIN: i128 = -9_223_372_036_854_775_808;
+pub const U_64_MAX: i128 = 18_446_744_073_709_551_615;
+pub const S_32_MAX: i128 = 2_147_483_647;
+pub const S_32_MIN: i128 = -2_147_483_648;
+pub const U_32_MAX: i128 = 4_294_967_295;
+
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub enum TypeConstraint{
     ///A union of constraints. Means at least one of these are true. If a union of traits, means at least 
@@ -177,6 +184,29 @@ impl Type{
             Type::Void => String::from("Void"),
         }
     }
+
+    pub fn get_pass_style(&self) -> PassStyle{ 
+        match self {
+            Type::Func{func_type: _} | Type::Enum{name: _, type_args: _} 
+                | Type::EnumMember{enum_name: _, member_name: _, enum_type_args: _} => panic!(),
+            Type::Bool | Type::FloatLiteral(_) | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never 
+                | Type::Number | Type::Void | Type::TypeLiteral(_) | Type::Undeclared 
+                => PassStyle::SimpleValue,
+            Type::String | Type::StringLiteral(_) => PassStyle::Value,
+            Type::Tuple(inners) => {
+                inners.iter().fold(PassStyle::Value, |acc, x| {
+                    match x.get_pass_style() {
+                        PassStyle::Value | PassStyle::SimpleValue => acc,
+                        PassStyle::Reference | PassStyle::ValueHoldingReference => PassStyle::ValueHoldingReference,
+                        PassStyle::Unknown => PassStyle::Unknown,
+                    }
+                })
+            },
+            Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
+            Type::UnsafeArray(_) => PassStyle::Reference,
+            Type::UserClass{name: _, type_args: _} => PassStyle::Value,
+        }
+    }
 }
 
 impl Display for Type {
@@ -226,6 +256,21 @@ impl Display for Mutability {
     }
 }
 
+///How a type is passed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum PassStyle{
+    ///Passed by value. May be true pass by value (e.g. tuples) or synthetic pass by value (e.g. arrays)
+    Value,
+    ///Passed by value with no changeable internal components. Ints, bools, numbers.
+    SimpleValue,
+    ///Passed by reference. Obviously we pass a pointer through for these.
+    Reference,
+    ///This is data passed by value that holds data to be passed by reference. An example might be an array holding a ref class.
+    ValueHoldingReference,
+    ///We can't tell what the pass style is. We assume the worst.
+    Unknown,
+}
+
 ///A type with a mutability modifier.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QualifiedType{
@@ -234,11 +279,9 @@ pub struct QualifiedType{
 }
 
 impl QualifiedType {
-    /*
     pub fn get_pass_style(&self) -> PassStyle{ 
         self.r#type.get_pass_style()
     }
-    */
 
     pub fn new(t: &Type, m: Mutability) -> QualifiedType  { 
         QualifiedType {r#type: t.clone(), mutability: m }

@@ -16,7 +16,6 @@ use bright_lang_ast::TypeDecl;
 use bright_lang_ast::func::GenericFunc;
 use bright_lang_ast::ClosureRef;
 use bright_lang_ast::func::LocalVar;
-use bright_lang_ast::expr::TypedExpr;
 use bright_lang_types::TypeArg;
 use bright_lang_ast::core::VariableMutability;
 use bright_lang_types::QualifiedType;
@@ -146,18 +145,18 @@ impl ParserContext {
     }
 
     pub fn get_fn_defn_from_decls(&self, name: &str) -> Option<FuncDefn> {
-        self.func_decls.iter().find(|&x| x.decl.name == *name).map(|x| x.decl.clone())
+        self.func_decls.iter().find(|&x| x.defn.name == *name).map(|x| x.defn.clone())
     }
 
     pub fn get_generic_fn_from_generics(&self, name: &str) -> Option<GenericFunc> {
-        self.generic_func_decls.iter().find(|&x| x.func.decl.name == *name).map(|x| x.clone())
+        self.generic_func_decls.iter().find(|&x| x.func.defn.name == *name).cloned()
     }
 
     pub fn get_fn_defn_from_imports(&self, name: &str) -> Option<FuncDefn> {
-        self.func_imports.iter().find(|&x| x.name == *name).map(|x| x.clone())
+        self.func_imports.iter().find(|&x| x.name == *name).cloned()
     }
 
-    fn push_type_scope(&mut self, args: &[TypeArg]) -> Vec<TypeArg> {
+    pub (crate) fn push_type_scope(&mut self, args: &[TypeArg]) -> Vec<TypeArg> {
         let mut v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
             None => HashMap::new(),
             Some(s) => {
@@ -200,11 +199,11 @@ impl ParserContext {
         self.type_var_stack.push(TypeScope{var_names: v});
     }
 
-    fn pop_type_scope(&mut self) {
+    pub (crate) fn pop_type_scope(&mut self) {
         self.type_var_stack.pop();
     }
 
-    fn get_scoped_type(&mut self, var_name: &String) -> Option<&TypeArg> {
+    pub (crate) fn get_scoped_type(&mut self, var_name: &str) -> Option<&TypeArg> {
         match self.type_var_stack.last() {
             None => None,
             Some(s) => {
@@ -217,14 +216,14 @@ impl ParserContext {
         !self.type_var_stack.is_empty()
     }
 
-    fn get_unique_name(&mut self, name: &str) -> String {
+    pub (crate) fn get_unique_name(&mut self, name: &str) -> String {
         let counter = self.counter;
         self.counter += 1;
         format!("{}#{}", name, counter)
     }
 
     fn get_global_decl(&self, id: &str) -> Option<&GlobalVariableDecl> {
-        self.global_decls.iter().find(|&x| x.name == id.to_string())
+        self.global_decls.iter().find(|&x| x.name == id)
     }
 
     fn push_empty_block_scope(&mut self) {
@@ -235,7 +234,7 @@ impl ParserContext {
         self.func_var_stack.push(Scope::default());
     }
 
-    fn push_block_scope(&mut self) {
+    pub (crate) fn push_block_scope(&mut self) {
         let o_head = self.block_var_stack.last();
         match o_head {
             None => self.push_empty_block_scope(),
@@ -251,7 +250,7 @@ impl ParserContext {
         }
     }
 
-    fn push_func_scope(&mut self) {
+    pub (crate) fn push_func_scope(&mut self) {
         let o_head = self.func_var_stack.last();
         match o_head {
             None => {
@@ -278,16 +277,16 @@ impl ParserContext {
         }
     }
 
-    fn pop_block_scope(&mut self) {
+    pub (crate) fn pop_block_scope(&mut self) {
         self.block_var_stack.pop();
     }
 
-    fn pop_func_scope(&mut self) {
+    pub (crate) fn pop_func_scope(&mut self) {
         self.block_var_stack.pop();
         self.func_var_stack.pop();
     }
 
-    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &QualifiedType, mutability: VariableMutability)  {
+    pub (crate) fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &QualifiedType, mutability: VariableMutability)  {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => {},
@@ -351,7 +350,7 @@ impl ParserContext {
             None => new_guard_type.clone(),
             Some(old_guard_type) => {
                 if old_guard_type == new_guard_type {
-                    parser_context.push_err(Error::TypeGuardReapply(loc.clone(), new_guard_type.clone()));
+                    parser_context.push_err(Error::TypeGuardReapply(*loc, new_guard_type.clone()));
                     new_guard_type.clone()
                 } else {
                     match new_guard_type{
@@ -432,7 +431,7 @@ impl ParserContext {
         }
     }
 
-    fn get_type_decl(&self, name: &String)-> Option<TypeDecl> {
+    pub (crate) fn get_type_decl(&self, name: &str)-> Option<TypeDecl> {
         self.type_map.get(name).cloned()
     }
 
@@ -452,7 +451,7 @@ impl ParserContext {
         self.global_decls.iter().find(|&x| x.name == *name)
     }
 
-    fn type_implements_trait(&self, t: &Type, trait_name: &String) -> bool {
+    pub (crate) fn type_implements_trait(&self, t: &Type, trait_name: &String) -> bool {
         //first, has the type been patched with an implementation?
         if self.trait_impl_map.contains_key(&(t.get_type_name(), trait_name.clone())) {
             return true;
