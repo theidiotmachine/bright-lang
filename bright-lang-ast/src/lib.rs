@@ -3,7 +3,7 @@ use crate::expr::Arena;
 use bright_lang_types::TraitDecl;
 use crate::core::VariableMutability;
 use crate::expr::NodeIdx;
-use bright_lang_types::UserClass;
+use bright_lang_types::{UserClass, UserStruct};
 use bright_lang_types::MemberFunc;
 use bright_lang_types::Type;
 use crate::func::GenericFunc;
@@ -46,6 +46,7 @@ pub enum TypeDecl{
     Alias{of: Type, export: bool},
     UserClass{export: bool, under_construction: bool, user_class: UserClass},
     Enum{export: bool},
+    Struct{export: bool, under_construction: bool, user_struct: UserStruct}
 }
 
 /// Variable decl

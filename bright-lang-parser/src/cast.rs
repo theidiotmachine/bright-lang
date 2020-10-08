@@ -7,6 +7,7 @@ use bright_lang_ast::expr::Arena;
 use bright_lang_ast::expr::NodeIdx;
 use bright_lang_types::QualifiedType;
 use bright_lang_types::Type;
+use bright_lang_types::PTR_MAX;
 
 use crate::ParserContext;
 
@@ -103,6 +104,13 @@ pub (crate) fn try_cast(from: &QualifiedType, to: &QualifiedType, cast_type: Cas
                 Type::Int(lower_from, upper_from) => {
                     if lower_from >= lower_to && upper_from <= upper_to { TypeCast::IntWiden(*lower_to, *upper_to) } else { TypeCast::None }
                 },
+                Type::UnsafePtr => {
+                    if cast_type == CastType::Explicit && *lower_to == 0 && *upper_to == PTR_MAX {
+                        TypeCast::FreeUpcast(QualifiedType::new(&Type::UnsafePtr, from.mutability))
+                    } else {
+                        TypeCast::None
+                    }
+                },
                 _ => TypeCast::None,
             }
         },
@@ -116,6 +124,21 @@ pub (crate) fn try_cast(from: &QualifiedType, to: &QualifiedType, cast_type: Cas
         Type::String => {
             match from_type {
                 Type::StringLiteral(_) => TypeCast::FreeUpcast(QualifiedType::new(&Type::String, from.mutability)),
+                _ => TypeCast::None,
+            }
+        },
+        //we kind of don't care about ptrs. If you are messing with them you better know what you are doing, so we let
+        // you cast them from all sorts of things
+        Type::UnsafePtr => {
+            match from_type {
+                Type::Int(lower_from, upper_from) => if cast_type == CastType::Implicit || *lower_from < 0 || *upper_from > PTR_MAX { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
+                Type::UnsafeStruct{name: _} => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
+                _ => TypeCast::None,
+            }
+        },
+        Type::UnsafeStruct{name: _} => {
+            match from_type {
+                Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
                 _ => TypeCast::None,
             }
         },

@@ -24,6 +24,7 @@ pub enum Error {
     UnnecessaryMut(SourceLocation, Type),
     UnrecognizedTypeArg(SourceLocation, String),
     UnrecognizedTypeArgConstraint(SourceLocation, String),
+    UnsafeCodeNotAllowed(SourceLocation),
 }
 
 impl Display for Error {
@@ -46,6 +47,7 @@ impl Display for Error {
             Error::UnnecessaryMut(ref loc, ref t) => write!(f, "WARNING{}: type {} can't be mut, ignoring. Did you mean to mark the variable var?", loc, t),
             Error::UnrecognizedTypeArg(ref loc, ref t) => write!(f, "ERROR {}: can't parse type arg {}", loc, t),
             Error::UnrecognizedTypeArgConstraint(ref loc, ref t) => write!(f, "ERROR {}: unrecognized type arg constraint {}", loc, t),
+            Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
         }
     }
 }

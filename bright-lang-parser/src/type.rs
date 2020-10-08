@@ -8,6 +8,7 @@ use bright_lang_ast::TypeDecl;
 use crate::ParserContext;
 use crate::BrightParser;
 use crate::Commitment;
+use crate::UnsafeParseMode;
 
 pub (crate) fn matches_type_constraint(
     arg_type: &Type,
@@ -268,7 +269,8 @@ impl<'a> BrightParser<'a> {
                             Some(Type::UserClass{name: ident.to_owned(), type_args: vec![]})
                         }
                     },
-                    TypeDecl::Enum{export: _} => unimplemented!()
+                    TypeDecl::Enum{export: _} => unimplemented!(),
+                    TypeDecl::Struct{user_struct: _, under_construction: _, export: _} => Some(Type::UnsafeStruct{name: ident.to_owned()}),
                 }
             }
         }
@@ -354,6 +356,12 @@ impl<'a> BrightParser<'a> {
             },
             Token::StringLiteral => Type::StringLiteral(next.text.unwrap()),
             Token::Unknown => Type::Unknown,
+            Token::UnsafePtr => {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(next.loc));
+                }
+                Type::UnsafePtr
+            },
             Token::Void => Type::Void,
             _ => {
                 parser_context.push_err(Error::InvalidType(next.loc, next.to_string()));

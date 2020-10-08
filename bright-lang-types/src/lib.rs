@@ -12,6 +12,8 @@ pub const U_64_MAX: i128 = 18_446_744_073_709_551_615;
 pub const S_32_MAX: i128 = 2_147_483_647;
 pub const S_32_MIN: i128 = -2_147_483_648;
 pub const U_32_MAX: i128 = 4_294_967_295;
+//FIXME64BIT
+pub const PTR_MAX: i128 = 4_294_967_295;
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub enum TypeConstraint{
@@ -140,6 +142,10 @@ pub enum Type {
     Unknown,
     /// __array type
     UnsafeArray(Box<Type>),
+    ///ptr - internal type
+    UnsafePtr,
+    /// user struct type
+    UnsafeStruct{name: String},
     /// User class type
     UserClass{name: String, type_args: Vec<Type>},
     ///Unresolved type variable
@@ -179,6 +185,8 @@ impl Type{
             Type::Undeclared => String::from("Undeclared"),
             Type::Unknown => String::from("Unknown"),
             Type::UnsafeArray(_) => String::from("__Array"),
+            Type::UnsafePtr => String::from("__Ptr"),
+            Type::UnsafeStruct{name} => name.clone(),
             Type::UserClass{name, type_args: _} => name.clone(),
             Type::VariableUsage{name, constraint: _} => name.clone(),
             Type::Void => String::from("Void"),
@@ -203,7 +211,8 @@ impl Type{
                 })
             },
             Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
-            Type::UnsafeArray(_) => PassStyle::Reference,
+            Type::UnsafeArray(_) | Type::UnsafeStruct{name: _} => PassStyle::Reference,
+            Type::UnsafePtr => PassStyle::Reference, //strictly wrong - the pointer is by value, but a pointer is pointing to something 
             Type::UserClass{name: _, type_args: _} => PassStyle::Value,
         }
     }
@@ -228,6 +237,8 @@ impl Display for Type {
             Type::Undeclared => write!(f, "Undeclared"),
             Type::Unknown => write!(f, "Unknown"),
             Type::UnsafeArray(t) => write!(f, "__Array<{}>", t),
+            Type::UnsafePtr => write!(f, "__Ptr"),
+            Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::UserClass{name, type_args} => write!(f, "{}<{}>", name, Type::display_types(type_args)),
             Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
             Type::Void => write!(f, "Void"),
@@ -348,6 +359,11 @@ pub struct UserClass{
     pub constructor: Option<MemberFunc>, 
     pub members: Vec<Member>, 
     pub storage: UserClassStorage,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UserStruct{
+    pub members: Vec<Member>, 
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

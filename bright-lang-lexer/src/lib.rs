@@ -161,6 +161,15 @@ enum MainToken {
     #[token("|")]
     Union,
 
+    #[token("__Array")]
+    UnsafeArray,
+
+    #[token("__Ptr")]
+    UnsafePtr,
+
+    #[token("__Struct")]
+    UnsafeStruct,
+
     #[token("Bool")]
     Bool,
 
@@ -353,6 +362,12 @@ pub enum Token {
 
     Union,
 
+    UnsafeArray,
+
+    UnsafePtr,
+
+    UnsafeStruct,
+
     Bool,
 
     False,
@@ -468,6 +483,9 @@ impl fmt::Display for Token {
             Token::StringLiteral => write!(f, "string literal"),
             Token::ThinArrow => write!(f, "->"),
             Token::Union => write!(f, "&"),
+            Token::UnsafeArray => write!(f, "__Array"),
+            Token::UnsafePtr => write!(f, "__Ptr"),
+            Token::UnsafeStruct => write!(f, "__Struct"),
             Token::Bool => write!(f, "Bool"),
             Token::False => write!(f, "False"),
             Token::Int => write!(f, "Int"),
@@ -867,6 +885,12 @@ impl<'a> BrightLexer<'a> {
                             return TokenData{token: Token::Union, loc, text: None},
                         Some(MainToken::Unknown) => 
                             return TokenData{token: Token::Unknown, loc, text: None},
+                        Some(MainToken::UnsafeArray) => 
+                            return TokenData{token: Token::UnsafeArray, loc, text: None},
+                        Some(MainToken::UnsafePtr) => 
+                            return TokenData{token: Token::UnsafePtr, loc, text: None},
+                        Some(MainToken::UnsafeStruct) => 
+                            return TokenData{token: Token::UnsafeStruct, loc, text: None},
                         Some(MainToken::Var) => 
                             return TokenData{token: Token::Var, loc, text: None},
                         Some(MainToken::Void) => 
