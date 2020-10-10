@@ -1,16 +1,13 @@
 use bright_lang_ast::Exports;
 use crate::context::ParserFuncContext;
 use bright_lang_ast::expr::NodeIdx;
-use bright_lang_ast::expr::TypedExpr;
-use std::collections::HashSet;
 use std::collections::HashMap;
-use std::cmp;
 
 use bright_lang_ast::expr::{Arena};
 use bright_lang_errs::source_location::Position;
 use bright_lang_errs::source_location::SourceLocation;
 use bright_lang_types::QualifiedType;
-use bright_lang_types::{Type, Mutability};
+use bright_lang_types::{Type};
 use bright_lang_ast::func::FuncDefn;
 use bright_lang_ast::func::Func;
 use bright_lang_errs::Error;
@@ -82,7 +79,7 @@ impl<'a> BrightParser<'a>{
     pub fn new(
         mut lexer: BrightLexer<'a>
     ) -> BrightParser<'a> {
-        let look_ahead = lexer.next();
+        let look_ahead = lexer.next_token();
         BrightParser{
             lexer, look_ahead
         }
@@ -109,7 +106,7 @@ impl<'a> BrightParser<'a>{
     }
 
     fn skip_next_item(&mut self)  {
-        self.look_ahead = self.lexer.next()
+        self.look_ahead = self.lexer.next_token()
     }
 
     fn next_item(&mut self) -> TokenData {
@@ -123,30 +120,48 @@ impl<'a> BrightParser<'a>{
         if next.token == token {
             self.skip_next_item()
         } else {
-            parser_context.push_err(Error::UnexpectedToken(next.loc, format!("Expected '{}', found '{}'", token.to_string(), next.to_string())));
+            parser_context.push_err(Error::UnexpectedToken(next.loc, format!("'{}'", token.to_string()), next.to_string()));
         }
     }
 
-    fn expect_string_literal(&mut self, message: &str, parser_context: &mut ParserContext) -> String {
+    fn expect_string_literal(&mut self, parser_context: &mut ParserContext) -> String {
         let next = self.peek_next_item();
         let token = next.token; 
         match token {
             Token::StringLiteral => next.text.unwrap(),   
             _ => {
-                parser_context.push_err(Error::UnexpectedToken(next.loc, message.to_string()));
+                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("string literal"), next.to_string()));
                 String::from("")
             }
         }
     }
 
-    pub (crate) fn expect_ident(&mut self, message: &str, parser_context: &mut ParserContext) -> String {
+    fn expect_semicolon(&mut self, parser_context: &mut ParserContext) {
+        let next = self.peek_next_item();
+        if next.token == Token::Semicolon || next.token == Token::NewLine {
+            self.skip_next_item()
+        } else {
+            parser_context.push_err(Error::UnexpectedToken(next.loc, "\';\' or new line".to_string(), next.to_string()));
+        }
+    }
+
+    fn expect_comma(&mut self, parser_context: &mut ParserContext) {
+        let next = self.peek_next_item();
+        if next.token == Token::Comma || next.token == Token::NewLine {
+            self.skip_next_item()
+        } else {
+            parser_context.push_err(Error::UnexpectedToken(next.loc, "\',\' or new line".to_string(), next.to_string()));
+        }
+    }
+
+    pub (crate) fn expect_ident(&mut self, parser_context: &mut ParserContext) -> (String, SourceLocation) {
         let next = self.peek_next_item();
         let token = next.token; 
         match token {
-            Token::Ident => next.text.unwrap(),
+            Token::Ident => (next.text.unwrap(), next.loc),
             _ => {
-                parser_context.push_err(Error::UnexpectedToken(next.loc, message.to_string()));
-                String::from("")
+                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("identifier"), next.to_string()));
+                (String::from(""), next.loc)
             }
         }
     }
@@ -188,15 +203,15 @@ impl<'a> BrightParser<'a>{
         parser_context: &mut ParserContext,
         importer: &mut dyn Importer,
     ) {
-        let mut init_body = Arena::new_block(SourceLocation::new(Position::new(0, 0), Position::new(0, 0)));
-        
+        let mut arena = Arena::new_block(SourceLocation::new(Position::new(0, 0), Position::new(0, 0)));
+        let block_ptr = NodeIdx::new(0);
         let mut fake_parser_func_context = ParserFuncContext::new(&None);
 
         loop {
             if self.peek_next_token() == Token::EOF {
                 break;
             } else {
-                self.parse_global_statement(&mut init_body, &mut fake_parser_func_context, parser_context, importer);
+                self.parse_global_statement(block_ptr, &mut arena, &mut fake_parser_func_context, parser_context, importer);
             }
         }
 
@@ -210,8 +225,8 @@ impl<'a> BrightParser<'a>{
                 //type_guard: None, 
                 member_func: false,
             },
-            arena: init_body,
-            body: Some(NodeIdx::new(0)),
+            arena,
+            body: Some(block_ptr),
             local_vars: vec![], 
             closure: vec![], 
             local_var_map: HashMap::new()

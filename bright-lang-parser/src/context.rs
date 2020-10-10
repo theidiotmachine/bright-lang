@@ -188,7 +188,7 @@ impl ParserContext {
         self.type_var_stack.push(TypeScope{var_names: v});
     }
 
-    fn push_empty_type_scope(&mut self) {
+    pub (crate) fn push_empty_type_scope(&mut self) {
         let v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
             None => HashMap::new(),
             Some(s) => {
@@ -320,14 +320,14 @@ impl ParserContext {
     }
 
     fn patch_var(&mut self, 
-        var_name: &String,
+        var_name: &str,
         new_var: &ScopedVar
     ) {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), new_var.clone());
+                head.var_names.insert(var_name.to_owned(), new_var.clone());
             }
         }
 
@@ -335,7 +335,7 @@ impl ParserContext {
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), new_var.clone());
+                head.var_names.insert(var_name.to_owned(), new_var.clone());
             }
         }
     }
@@ -371,7 +371,7 @@ impl ParserContext {
 
     /// Apply a type guard to an existing variable.
     fn guard_var(&mut self, 
-        internal_var_name: &String, 
+        internal_var_name: &str, 
         guard_type: &Type,
         loc: &SourceLocation,
     ) {
@@ -380,13 +380,13 @@ impl ParserContext {
 
         let new_var = match shadowed_var {
             ScopedVar::Local{internal_name: _, r#type, guard_type: old_guard_type, mutability} => {
-                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(),
+                ScopedVar::Local{internal_name: internal_var_name.to_owned(), r#type,
                     guard_type: Some(ParserContext::patch_guard_type(&old_guard_type, guard_type, loc, self)),
                     mutability
                 }
             },
             ScopedVar::ClosureRef{internal_name: _, r#type, guard_type: old_guard_type, mutability} => {
-                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), 
+                ScopedVar::ClosureRef{internal_name: internal_var_name.to_owned(), r#type, 
                     guard_type: Some(ParserContext::patch_guard_type(&old_guard_type, guard_type, loc, self)),
                     mutability
                 }
@@ -397,32 +397,29 @@ impl ParserContext {
     }
 
     fn unguard_var(&mut self, 
-        internal_var_name: &String, 
+        internal_var_name: &str, 
     )  {
         let (var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(internal_var_name);
 
         let o_new_var = match shadowed_var {
             ScopedVar::Local{internal_name: _, r#type, guard_type: o_guard_type, mutability} => {
                 match o_guard_type {
-                    Some(_) => Some(ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability}),
+                    Some(_) => Some(ScopedVar::Local{internal_name: internal_var_name.to_owned(), r#type, guard_type: None, mutability}),
                     None => None
                 }
             },
             ScopedVar::ClosureRef{internal_name: _, r#type, guard_type: o_guard_type, mutability} => {
                 match o_guard_type {
-                    Some(_) => Some(ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability}),
+                    Some(_) => Some(ScopedVar::ClosureRef{internal_name: internal_var_name.to_owned(), r#type, guard_type: None, mutability}),
                     None => None
                 }
             }
         };
 
-        match o_new_var {
-            Some(new_var) => self.patch_var(&var_name, &new_var),
-            None => {}
-        }
+        if let Some(new_var) = o_new_var { self.patch_var(&var_name, &new_var) }
     }
 
-    fn get_scoped_var(&self, var_name: &String) -> Option<&ScopedVar> {
+    fn get_scoped_var(&self, var_name: &str) -> Option<&ScopedVar> {
         match self.block_var_stack.last() {
             None => None,
             Some(s) => {
@@ -435,7 +432,7 @@ impl ParserContext {
         self.type_map.get(name).cloned()
     }
 
-    fn append_type_decl_member_func(&mut self, type_name: &String, mf: &MemberFunc) {
+    fn append_type_decl_member_func(&mut self, type_name: &str, mf: &MemberFunc) {
         let td = self.type_map.get_mut(type_name).unwrap();
         match td {
             /*
@@ -526,11 +523,11 @@ impl ParserFuncContext{
         }
     }
 
-    pub fn add_var(&mut self, internal_name: &String, var_type: &QualifiedType, closure_source: bool, arg: bool, mutability: VariableMutability) -> () {
+    pub fn add_var(&mut self, internal_name: &str, var_type: &QualifiedType, closure_source: bool, arg: bool, mutability: VariableMutability) {
         let idx = self.local_vars.len();
-        self.local_var_map.insert(internal_name.clone(), idx as u32);
+        self.local_var_map.insert(internal_name.to_owned(), idx as u32);
         self.local_vars.push(
-            LocalVar{internal_name: internal_name.clone(), r#type: var_type.clone(), closure_source, arg, mutability}
+            LocalVar{internal_name: internal_name.to_owned(), r#type: var_type.clone(), closure_source, arg, mutability}
         );
     }
 }

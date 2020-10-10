@@ -185,6 +185,9 @@ enum MainToken {
     #[token("Number")]
     Number,
 
+    #[token("StaticArray")]
+    StaticArray,
+
     #[token("True")]
     True,
 
@@ -194,6 +197,9 @@ enum MainToken {
     #[token("Void")]
     Void,
     
+    #[token("alias")]
+    Alias,
+
     #[token("as")]
     As,
 
@@ -378,12 +384,16 @@ pub enum Token {
 
     Number,
 
+    StaticArray,
+
     True,
 
     Unknown,
 
     Void,
-    
+    ///`alias` keyword
+    Alias,
+
     As,
 
     Break,
@@ -491,9 +501,11 @@ impl fmt::Display for Token {
             Token::Int => write!(f, "Int"),
             Token::Never => write!(f, "Never"),
             Token::Number => write!(f, "Number"),
+            Token::StaticArray => write!(f, "StaticArray"),
             Token::True => write!(f, "True"),
             Token::Unknown => write!(f, "Unknown"),
             Token::Void => write!(f, "Void"),
+            Token::Alias => write!(f, "alias"),
             Token::As => write!(f, "as"),
             Token::Break => write!(f, "break"),
             Token::Class => write!(f, "class"),
@@ -717,7 +729,7 @@ impl<'a> BrightLexer<'a> {
         }
     }
 
-    pub fn next(&mut self) -> TokenData {
+    pub fn next_token(&mut self) -> TokenData {
         loop {
             match &mut self.mode {
                 Modes::Main(t) => {
@@ -732,6 +744,8 @@ impl<'a> BrightLexer<'a> {
                     match r {
                         None => 
                             return TokenData{token: Token::EOF, loc, text: None},
+                        Some(MainToken::Alias) => 
+                            return TokenData{token: Token::Alias, loc, text: None},
                         Some(MainToken::And) => 
                             return TokenData{token: Token::And, loc, text: None},
                         Some(MainToken::As) => 
@@ -869,6 +883,8 @@ impl<'a> BrightLexer<'a> {
                             return TokenData{token: Token::SquigglyOpen, loc, text: None},
                         Some(MainToken::Stack) => 
                             return TokenData{token: Token::Stack, loc, text: None},
+                        Some(MainToken::StaticArray) => 
+                            return TokenData{token: Token::StaticArray, loc, text: None},
                         Some(MainToken::Switch) => 
                             return TokenData{token: Token::Switch, loc, text: None},
                         Some(MainToken::Ident) => 
@@ -1042,10 +1058,10 @@ mod tests {
         use super::*;
         let mut lex = BrightLexer::new("fn fn fn");
 
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 4, 1, 6), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 7, 1, 9), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(1, 9, 1, 9), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 4, 1, 6), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 7, 1, 9), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(1, 9, 1, 9), text: None});
     }
 
     #[test]
@@ -1053,9 +1069,9 @@ mod tests {
         use super::*;
         let mut lex = BrightLexer::new("fn //can't see me\n fn");
 
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(2, 2, 2, 4), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(2, 4, 2, 4), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(2, 2, 2, 4), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(2, 4, 2, 4), text: None});
     }
 
     #[test]
@@ -1063,9 +1079,9 @@ mod tests {
         use super::*;
         let mut lex = BrightLexer::new("fn /*can't see me\n or me */ fn");
 
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(2, 11, 2, 13), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(2, 13, 2, 13), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(2, 11, 2, 13), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(2, 13, 2, 13), text: None});
     }
 
     #[test]
@@ -1073,9 +1089,9 @@ mod tests {
         use super::*;
         let mut lex = BrightLexer::new("fn 'now we come to \n \\'lunch\\'' fn");
 
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::StringLiteral, loc: SourceLocation::new_line_col(1, 4, 2, 12), text: Some(String::from("now we come to \n 'lunch'"))});
-        assert_eq!(lex.next(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(2, 13, 2, 15), text: None});
-        assert_eq!(lex.next(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(2, 15, 2, 15), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(1, 1, 1, 3), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::StringLiteral, loc: SourceLocation::new_line_col(1, 4, 2, 12), text: Some(String::from("now we come to \n 'lunch'"))});
+        assert_eq!(lex.next_token(), TokenData{token:Token::Fn, loc: SourceLocation::new_line_col(2, 13, 2, 15), text: None});
+        assert_eq!(lex.next_token(), TokenData{token:Token::EOF, loc: SourceLocation::new_line_col(2, 15, 2, 15), text: None});
     }
 }

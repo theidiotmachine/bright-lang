@@ -1,3 +1,6 @@
+use bright_lang_ast::TraitImpl;
+use bright_lang_types::UserStruct;
+use bright_lang_types::{Member, Privacy};
 use bright_lang_types::{QualifiedType, Type};
 use crate::op::{BinaryOperatorData, Association};
 use bright_lang_errs::Error;
@@ -81,7 +84,7 @@ impl<'a> BrightParser<'a> {
                 TypeConstraint::Union(vec![lhs.clone(), rhs.clone()])
             },
             _ => {
-                parser_context.push_err(Error::UnexpectedToken(*loc, "expected | or &".to_string()));
+                parser_context.push_err(Error::UnexpectedToken(*loc, "| or &".to_string(), op.to_string()));
                 TypeConstraint::None
             }
         }
@@ -211,7 +214,7 @@ impl<'a> BrightParser<'a> {
             resolved_types.push(arg_type);
             let next = self.peek_next_item();
             let token = next.token;
-            if token == Token::Comma {
+            if token == Token::Comma || token == Token::NewLine {
                 self.skip_next_item();
                 loc = self.peek_next_location();
                 idx += 1;
@@ -313,32 +316,32 @@ impl<'a> BrightParser<'a> {
                         Token::BinLiteral | Token::HexLiteral | Token::OctLiteral => next.parse_i128().unwrap(),
                         Token::DecLiteral => {
                             if next.text.clone().unwrap().contains('.') {
-                                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("expecting integer constant")));
+                                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("integer constant"), next.to_string()));
                                 S_32_MIN
                             } else {
                                 next.parse_i128().unwrap()
                             }
                         },
                         _ => {
-                            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("expecting integer constant")));
+                            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("integer constant"), next.to_string()));
                             S_32_MIN
                         }
                     };
-                    self.expect_token(Token::Comma, parser_context);
+                    self.expect_comma(parser_context);
                     let next = self.next_item();
                     let token = next.token;
                     let upper = match token {
                         Token::BinLiteral | Token::HexLiteral | Token::OctLiteral => next.parse_i128().unwrap(),
                         Token::DecLiteral => {
                             if next.text.clone().unwrap().contains('.') {
-                                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("expecting integer constant")));
+                                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("integer constant"), next.to_string()));
                                 S_32_MIN
                             } else {
                                 next.parse_i128().unwrap()
                             }
                         },
                         _ => {
-                            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("expecting integer constant")));
+                            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("integer constant"), next.to_string()));
                             S_32_MIN
                         }
                     };
@@ -388,5 +391,76 @@ impl<'a> BrightParser<'a> {
             mutability = Mutability::Const;
         }
         QualifiedType::new(&t, mutability)
+    }
+
+    pub(crate) fn parse_alias(&mut self, 
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) {
+        self.skip_next_item();
+        let (id, _) = self.expect_ident(parser_context);
+        self.skip_next_item();
+        self.expect_token(Token::Equal, parser_context);
+        let t = self.parse_type(parser_context);
+        parser_context.type_map.insert(id, TypeDecl::Alias{of: t, export});
+    }
+
+    pub (crate) fn parse_struct_decl(&mut self,    
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) {
+        let mut loc = self.peek_next_location();
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
+            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc));
+        }
+        self.skip_next_item();
+
+        let (id, id_loc) = self.expect_ident(parser_context);
+
+        if parser_context.type_map.contains_key(&id) {
+            parser_context.push_err(Error::DuplicateTypeName(id_loc, id.clone()))
+        }
+
+        parser_context.push_empty_type_scope();
+
+        let mut members: Vec<Member> = vec![];
+
+        self.expect_token(Token::SquigglyOpen, parser_context);
+
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{user_struct: UserStruct{members: vec![]}, under_construction: true, export});
+
+        loop {
+            let lookahead_item = self.peek_next_item();
+            loc.end = lookahead_item.loc.end;
+            let lookahead = lookahead_item.token;
+         
+            match lookahead {
+                Token::SquigglyClose => {
+                    self.skip_next_item();
+                    break;
+                },
+                Token::Ident => {
+                    let i = lookahead_item.text.unwrap();
+                    self.skip_next_item();
+                    self.expect_token(Token::Colon, parser_context);
+                    let member_type = self.parse_type(parser_context);
+                    self.expect_semicolon(parser_context);
+                    members.push(Member{name: i.to_string(), r#type: member_type.clone(), privacy: Privacy::Public});
+                },
+                _ => {
+                    self.skip_next_item();
+                    parser_context.push_err(Error::UnexpectedToken(lookahead_item.loc, "\'}\' or member".to_string(), lookahead_item.to_string()));
+                }
+            }
+        }
+
+        parser_context.pop_type_scope();
+
+        //register the fact that this is a struct and so has the IsAStruct trait
+        let trait_name = String::from("IsAStruct");
+        parser_context.trait_impl_map.insert((id.to_string(), trait_name.clone()), TraitImpl{trait_name, for_type: Type::UnsafeStruct{name: id.to_string()}, export: true, member_funcs: vec![]});
+
+        //and register the type itself
+        parser_context.type_map.insert(id, TypeDecl::Struct{user_struct: UserStruct{members: vec![]}, under_construction: false, export});
     }
 }

@@ -1,8 +1,12 @@
+use bright_lang_ast::expr::FuncObjectCreation;
+use bright_lang_ast::expr::Expr;
+use bright_lang_ast::expr::TypedExpr;
+use bright_lang_ast::expr::NodeIdx;
 use crate::cast::{cast_typed_expr, CastType};
 use bright_lang_errs::source_location::SourceLocation;
 use bright_lang_ast::func::FuncArg;
 use bright_lang_ast::expr::Arena;
-use bright_lang_lexer::{Token, TokenData, BrightLexer};
+use bright_lang_lexer::{Token};
 use bright_lang_ast::func::GenericFunc;
 use std::collections::HashMap;
 use bright_lang_ast::func::Func;
@@ -29,7 +33,7 @@ impl<'a> BrightParser<'a> {
     fn parse_function_decl_arg(&mut self,
         parser_context: &mut ParserContext,
     ) -> Option<FuncArg> {
-        let mut next = self.peek_next_item();
+        let next = self.peek_next_item();
         let token = next.token;
         let mut mutability = VariableMutability::Constant;
         if token == Token::Var {
@@ -37,7 +41,7 @@ impl<'a> BrightParser<'a> {
             self.skip_next_item();
         }
 
-        let name = self.expect_ident("Expecting variable name to be an identifier", parser_context);
+        let (name, _) = self.expect_ident(parser_context);
         let next = self.peek_next_item();
         let token = &next.token;
         match token {
@@ -57,7 +61,7 @@ impl<'a> BrightParser<'a> {
                 Some(FuncArg{name, r#type: QualifiedType::new(&Type::Undeclared, Mutability::Unknown), mutability})
             },
             _ => {
-                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("expecting ')' or ',' in arg list")));
+                parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("')' or ','"), next.to_string()));
                 self.skip_next_item();
                 None
             }
@@ -176,7 +180,7 @@ impl<'a> BrightParser<'a> {
                     }
                 },
                 _ => {
-                    parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("expecting ')' in arg list")));
+                    parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("')'"), next.to_string()));
                     self.skip_next_item();
                 }
             }
@@ -187,14 +191,14 @@ impl<'a> BrightParser<'a> {
     fn parse_func_decl_internal(&mut self,
         export: bool,
         phase: ParserPhase,
-        prefix: &String,
+        prefix: &str,
         this_type: &Option<Type>,
         this_type_args: &Vec<TypeArg>,
         func_decl_context: FuncDeclContext,
         arena: &mut Arena,
         parser_func_context_outer: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> (String, String, Vec<TypeArg>, FuncType) {
+    ) -> (Option<NodeIdx>, String, String, Vec<TypeArg>, FuncType) {
         if func_decl_context == FuncDeclContext::SharedMemberFn {
             self.expect_token(Token::Shared, parser_context);
         } 
@@ -218,7 +222,7 @@ impl<'a> BrightParser<'a> {
                 Token::Ident => {
                     let i = next.text.unwrap();
                     self.skip_next_item();
-                    let mut s = prefix.clone();
+                    let mut s = prefix.to_owned();
                     s.push_str(i.as_str());
                     (s, String::from(i.as_str()))
                 }, 
@@ -281,7 +285,7 @@ impl<'a> BrightParser<'a> {
                 QualifiedType::new(&Type::Undeclared, Mutability::Unknown)
             //, None)
         } else {
-            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("Expecting '->' or '=>'")));
+            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("'->' or '=>'"), next.to_string()));
             self.skip_next_item();
             //(
                 QualifiedType::new(&Type::Undeclared, Mutability::Unknown)
@@ -316,7 +320,7 @@ impl<'a> BrightParser<'a> {
             }
             let func_type = func.defn.get_func_type();
             parser_context.generic_func_decls.push(GenericFunc{func, type_args: type_args.clone(), num_this_type_args});
-            (mangled_name, name, type_args, func_type)
+            (None, mangled_name, name, type_args, func_type)
         } else {
             let func_closure = func.closure.clone();
             // now we have a closure of an inner function, we need to capture it. So look at every element
@@ -333,12 +337,12 @@ impl<'a> BrightParser<'a> {
             }
             let func_type = func.defn.get_func_type();
             parser_context.func_decls.push(func); 
-            (/*Some(
-                TypedExpr{
-                    expr: Expr::FuncDecl(FuncObjectCreation{name: mangled_name.clone(), closure: func_closure}), 
-                    r#type: QualifiedType::new_const(&Type::Func{func_type: Box::new(func_type.clone())}), 
-                    loc: loc, return_expr: ReturnExpr::None
-                }),*/ 
+            (
+                Some(arena.push(TypedExpr::new(
+                    &Expr::FuncDecl(FuncObjectCreation{name: mangled_name.clone(), closure: func_closure}), 
+                    &QualifiedType::new_const(&Type::Func{func_type: Box::new(func_type.clone())}), 
+                    loc
+                ))),
                 mangled_name, name, vec![], func_type
             )
         }
@@ -349,7 +353,7 @@ impl<'a> BrightParser<'a> {
         arena: &mut Arena,
         parser_func_context_outer: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) {
-        self.parse_func_decl_internal(export, ParserPhase::MainPhase, &String::from(""), &None, &vec![], FuncDeclContext::Global, arena, parser_func_context_outer, parser_context);
+    ) -> Option<NodeIdx> {
+        self.parse_func_decl_internal(export, ParserPhase::MainPhase, &String::from(""), &None, &vec![], FuncDeclContext::Global, arena, parser_func_context_outer, parser_context).0
     }
 }
