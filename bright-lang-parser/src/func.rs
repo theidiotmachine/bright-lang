@@ -171,7 +171,7 @@ impl<'a> BrightParser<'a> {
         let mut args: Vec<FuncArg> = if this_type.is_some() { vec![FuncArg{name: String::from("this"), r#type: this_type.clone().unwrap(), mutability: VariableMutability::Constant}]} else { Vec::new() };
         loop {
             let next = self.peek_next_item();
-            let token = &next.token;
+            let token = next.token;
             match token {
                 Token::RoundClose => { self.skip_next_item(); return args; },
                 Token::Ident | Token::Var => {

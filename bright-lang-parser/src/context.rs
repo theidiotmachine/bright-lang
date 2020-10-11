@@ -116,7 +116,7 @@ impl ParserContext {
     pub (crate) fn new(unsafe_parse_mode: UnsafeParseMode, file_name: &str) -> ParserContext {
         let mut trait_map = HashMap::new();
         let trait_name = String::from("IsAStruct");
-        trait_map.insert(trait_name.clone(), TraitDecl{name: trait_name, member_funcs: vec![]});
+        trait_map.insert(trait_name.clone(), TraitDecl{name: trait_name, member_funcs: vec![], export: false});
         ParserContext{
             global_decls: vec![],
             global_imports: vec![],

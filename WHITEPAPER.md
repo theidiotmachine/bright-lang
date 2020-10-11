@@ -44,8 +44,7 @@
   - [Generic classes](#generic-classes)
   - [Member functions](#member-functions)
   - [Static member functions](#static-member-functions)
-  - [Alternative constructor syntaxes](#alternative-constructor-syntaxes)
-    - [Rust-like](#rust-like)
+  - [Private constructor syntaxes](#private-constructor-syntaxes)
   - [Traits again](#traits-again)
   - [Inheritance](#inheritance)
   - [Arrays](#arrays)
@@ -784,7 +783,7 @@ So our very provisional syntax is something like this.
 
 ```
 class heap Hello(x: Bool) {
-    //it's a global so it has let
+    //it's a global so it has let. This is not allowed in generic classes.
     shared let x = 300
 
     shared fn staticFunction() -> Number { 
@@ -799,13 +798,7 @@ class heap Hello(x: Bool) {
 
 `shared` is a nice keyword for a couple of reasons. Firstly, it is the same length as `static`. This is important! Secondly, it is descriptive. We worry slightly that we might regret not bagging the `shared` keyword for multi-threaded stuff later.
 
-### Alternative constructor syntaxes
-
-As we typed this document, we started to dislike the `constructor` syntax. It's long, it's clumsy, it also doesn't give you much to differentiate the primary constructor from secondary constructors. Now that we have `shared`s, we started to explore alternative syntaxes. When you read the rest of this document, try and imagine these in the other places you see classes. 
-
-#### Rust-like
-
-The Rust solution to this is similar: the object is broken down into a record and factory functions. This means you can always create a 'raw' object by using the (lovely JavaScripty) syntax of record creation. We like this, but we don't like the way there is no way to hide derived members. So our version looks like this.
+### Private constructor syntaxes
 
 ```
 fn someFunction(x: Number) -> Number x * 2
@@ -821,8 +814,6 @@ let z = SomeClass.new(5, 'hello')
 ```
 
 Here `private` in front of the members tuple means only the class can do the record construction syntax. It's optional, so if you omit it you get to use the record syntax everywhere.
-
-This is wordier than the Scala solution, but we prefer this one.
 
 ### Traits again
 
@@ -868,8 +859,7 @@ trait Wrapper<T> {
     fn mut set(t: T) -> Void
 }
 
-class heap Storer<T> {
-    constructor(var t: T) {}
+class heap Storer<T>(var t: T) {
     fn get() -> T this.t
     fn mut set(t: T) -> this.t = t
 }

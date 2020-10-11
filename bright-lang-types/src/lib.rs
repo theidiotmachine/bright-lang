@@ -359,7 +359,7 @@ impl Display for QualifiedType {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub enum Privacy{
-    Public, Private, Protected
+    Public, Private, Unresolved
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -373,17 +373,29 @@ pub struct MemberFunc{
     pub privacy: Privacy,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StaticMemberFunc{
+    pub type_args: Vec<TypeArg>,
+    pub func_type: FuncType,
+    ///This is the full name with the type prefix in front of it.
+    pub mangled_name: String,
+    ///This is the name you would type.
+    pub name: String,
+    pub privacy: Privacy,
+}
+
 /// Data member of a struct.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Member{
     pub name: String,
-    pub r#type: Type,
+    pub r#type: QualifiedType,
     pub privacy: Privacy,
+    pub var: bool,
 }
 
 impl Member {
-    pub fn get_member_type_map(members: &[Member]) -> HashMap<String, Type> {
-        let mut out: HashMap<String, Type> = HashMap::new();
+    pub fn get_member_type_map(members: &[Member]) -> HashMap<String, QualifiedType> {
+        let mut out: HashMap<String, QualifiedType> = HashMap::new();
         for m in members {
             out.insert(m.name.clone(), m.r#type.clone());
         }
@@ -395,14 +407,15 @@ impl Member {
 pub enum UserClassStorage{
     Heap,
     HeapRef,
-    Stack
+    Stack,
+    Unresolved
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserClass{
     pub type_args: Vec<TypeArg>, 
     pub member_funcs: Vec<MemberFunc>, 
-    pub constructor: Option<MemberFunc>, 
+    pub static_member_funcs: Vec<StaticMemberFunc>, 
     pub members: Vec<Member>, 
     pub storage: UserClassStorage,
 }
@@ -424,4 +437,5 @@ pub struct TraitMemberFunc{
 pub struct TraitDecl{
     pub name: String, 
     pub member_funcs: Vec<TraitMemberFunc>, 
+    pub export: bool,
 }

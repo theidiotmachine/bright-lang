@@ -12,6 +12,7 @@ use crate::Importer;
 use crate::ParserContext;
 use bright_lang_lexer::{Token};
 use crate::BrightParser;
+use crate::ParserPhase;
 
 impl<'a> BrightParser<'a> {
     fn parse_import_decl(&mut self,
@@ -127,6 +128,7 @@ impl<'a> BrightParser<'a> {
         let tok = next.token;
         match &tok {
             Token::Alias => self.parse_alias(true, parser_context),
+            Token::Class => self.parse_class_decl(true, ParserPhase::MainPhase, parser_context),
             Token::Fn => {
                 self.parse_function_decl_main_phase(true, arena, fake_parser_func_context, parser_context);
             },
@@ -162,6 +164,7 @@ impl<'a> BrightParser<'a> {
         
         match token {
             Token::Alias => self.parse_alias(false, parser_context),
+            Token::Class => self.parse_class_decl(false, ParserPhase::MainPhase, parser_context),
             Token::Export => self.parse_export_decl_main_phase(block_ptr, arena, fake_parser_func_context, parser_context),
             Token::Fn => {
                 let o_func = self.parse_function_decl_main_phase(false, arena, fake_parser_func_context, parser_context);
