@@ -176,7 +176,7 @@ impl ParserContext {
     }
 
     ///A trait type scope does not need a unique name: traits are global things. I think?
-    fn push_trait_type_scope(&mut self, arg: &TypeArg)  {
+    pub (crate) fn push_trait_type_scope(&mut self, arg: &TypeArg)  {
         let mut v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
             None => HashMap::new(),
             Some(s) => {
@@ -222,7 +222,7 @@ impl ParserContext {
         format!("{}#{}", name, counter)
     }
 
-    fn get_global_decl(&self, id: &str) -> Option<&GlobalVariableDecl> {
+    pub (crate) fn get_global_decl(&self, id: &str) -> Option<&GlobalVariableDecl> {
         self.global_decls.iter().find(|&x| x.name == id)
     }
 
@@ -286,12 +286,12 @@ impl ParserContext {
         self.func_var_stack.pop();
     }
 
-    pub (crate) fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &QualifiedType, mutability: VariableMutability)  {
+    pub (crate) fn add_var(&mut self, var_name: &str, internal_var_name: &str, r#type: &QualifiedType, mutability: VariableMutability)  {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => {},
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability});
+                head.var_names.insert(var_name.to_owned(), ScopedVar::Local{internal_name: internal_var_name.to_owned(), r#type: r#type.clone(), guard_type: None, mutability});
             }
         }
 
@@ -299,7 +299,7 @@ impl ParserContext {
         match o_head {
             None => {},
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability});
+                head.var_names.insert(var_name.to_owned(), ScopedVar::Local{internal_name: internal_var_name.to_owned(), r#type: r#type.clone(), guard_type: None, mutability});
             }
         }
     }
@@ -444,13 +444,13 @@ impl ParserContext {
         }
     }
 
-    fn get_global_var(&self, name: &String) -> Option<&GlobalVariableDecl> {
+    fn get_global_var(&self, name: &str) -> Option<&GlobalVariableDecl> {
         self.global_decls.iter().find(|&x| x.name == *name)
     }
 
-    pub (crate) fn type_implements_trait(&self, t: &Type, trait_name: &String) -> bool {
+    pub (crate) fn type_implements_trait(&self, t: &Type, trait_name: &str) -> bool {
         //first, has the type been patched with an implementation?
-        if self.trait_impl_map.contains_key(&(t.get_type_name(), trait_name.clone())) {
+        if self.trait_impl_map.contains_key(&(t.get_type_name(), trait_name.to_owned())) {
             return true;
         }
 

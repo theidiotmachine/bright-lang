@@ -54,8 +54,6 @@ pub enum TypeDecl{
 pub struct GlobalVariableDecl {
     pub name: String,
     pub r#type: QualifiedType,
-    pub init: Option<NodeIdx>,
-    pub arena: Arena,
     pub export: bool,
     pub mutability: VariableMutability,
 }

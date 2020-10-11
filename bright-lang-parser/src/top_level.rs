@@ -117,6 +117,7 @@ impl<'a> BrightParser<'a> {
     /// and therefore we also pick up the baggage about 'fake' function contexts and init_body
     /// It's not brilliant, this code. It has a lot of baggage that could be removed
     fn parse_export_decl_main_phase(&mut self, 
+        block_ptr: NodeIdx,
         arena: &mut Arena,
         fake_parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
@@ -129,17 +130,15 @@ impl<'a> BrightParser<'a> {
             Token::Fn => {
                 self.parse_function_decl_main_phase(true, arena, fake_parser_func_context, parser_context);
             },
+            Token::Trait => self.parse_trait_decl(true, parser_context),
             Token::UnsafeStruct => self.parse_struct_decl(true, parser_context),
+            Token::Let => {
+                let var_decl = self.parse_variable_decl(true, true, arena, fake_parser_func_context, parser_context);
+                arena.push_np_to_block(block_ptr, var_decl);
+            },
             /*
             Token::Keyword(ref k) => match k {
-                Keyword::Let => {
-                    let var_decl = self.parse_variable_decl(true, true, fake_parser_func_context, parser_context);
-                    init_body.push(var_decl);
-                },
-                Keyword::Trait => self.parse_trait_decl(true, parser_context),
-                Keyword::Type => self.parse_trait_decl(true, parser_context),
                 Keyword::Implement => self.parse_trait_impl(true, ParserPhase::MainPhase, parser_context),
-                _ => parser_context.errors.push(Error::UnexpectedToken(next.location.clone(), String::from("Can only export functions, variables, or types")))
             },
             */
             _ => parser_context.errors.push(Error::MayNotExport(next.loc))
@@ -162,26 +161,23 @@ impl<'a> BrightParser<'a> {
         let token = &next.token;
         
         match token {
-            Token::Export => self.parse_export_decl_main_phase(arena, fake_parser_func_context, parser_context),
+            Token::Alias => self.parse_alias(false, parser_context),
+            Token::Export => self.parse_export_decl_main_phase(block_ptr, arena, fake_parser_func_context, parser_context),
             Token::Fn => {
                 let o_func = self.parse_function_decl_main_phase(false, arena, fake_parser_func_context, parser_context);
                 if let Some(f) = o_func { arena.push_np_to_block(block_ptr, f) };
             },
             Token::Import => {self.parse_import_decl(parser_context, importer);}
+            Token::Trait => self.parse_trait_decl(false, parser_context),
             Token::UnsafeStruct => self.parse_struct_decl(false, parser_context),
+            Token::Let => {
+                let var_decl = self.parse_variable_decl(true, false, arena, fake_parser_func_context, parser_context);
+                arena.push_np_to_block(block_ptr, var_decl);
+            },
             /*
             Token::Keyword(ref k) => match k {
                 
-                Keyword::Let => {
-                    let var_decl = self.parse_variable_decl(true, false, fake_parser_func_context, parser_context);
-                    init_body.push(var_decl);
-                },
-                
-                Keyword::Alias => self.parse_alias(false, parser_context),
-                Keyword::Type => self.parse_type_decl(false, ParserPhase::MainPhase, parser_context),
-                Keyword::Trait => self.parse_trait_decl(false, parser_context),
                 Keyword::Implement => self.parse_trait_impl(false, ParserPhase::MainPhase, parser_context),
-                _ => { parser_context.errors.push(self.unexpected_token_error_raw(next.span, &next.location, "expecting valid statement")); self.skip_next_item(); }
             },
             */
             _ => {

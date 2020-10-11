@@ -1,3 +1,4 @@
+use crate::GlobalVariableDecl;
 use crate::ClosureRef;
 use bright_lang_types::TraitMemberFunc;
 use bright_lang_types::Type;
@@ -124,6 +125,8 @@ pub enum Expr {
     FreeUpcast(NodeIdx),
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
     FuncDecl(FuncObjectCreation),
+    ///global variable use
+    GlobalVariableInit{name: String, init: NodeIdx},
     //Assign a global variable
     GlobalVariableLValue(String),
     ///global variable use

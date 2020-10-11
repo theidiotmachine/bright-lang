@@ -1,3 +1,13 @@
+use bright_lang_types::INT_S_32;
+use bright_lang_types::INT_U_32;
+use bright_lang_types::INT_U_64;
+use bright_lang_types::INT_S_64;
+use bright_lang_types::S_64_MIN;
+use bright_lang_types::S_32_MIN;
+use bright_lang_types::S_32_MAX;
+use bright_lang_types::U_32_MAX;
+use bright_lang_types::S_64_MAX;
+use bright_lang_types::U_64_MAX;
 use bright_lang_types::Mutability;
 use bright_lang_types::PassStyle;
 use bright_lang_ast::expr::TypedExpr;
@@ -48,10 +58,10 @@ enum ConstCast{
 
 fn const_check(from_pass_style: PassStyle, to_pass_style: PassStyle, from_mutability: Mutability, to_mutability: Mutability) -> ConstCast {
     //you can't pass a const reference to a mut reference
-    if (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::SimpleValue {
+    if (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::DeepCopyHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::SimpleValue {
         ConstCast::Fail
     //the object must be duplicated
-    } else if to_pass_style == PassStyle::Value && from_pass_style == PassStyle::Value && to_mutability == Mutability::Mut && from_mutability == Mutability::Const {
+    } else if to_pass_style == PassStyle::DeepCopy && from_pass_style == PassStyle::DeepCopy && to_mutability == Mutability::Mut {
         ConstCast::Clone
     //if we don't know, assume the worst
     } else if (to_pass_style == PassStyle::Unknown || from_pass_style == PassStyle::Unknown) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const {
@@ -197,5 +207,37 @@ pub (crate) fn cast_typed_expr(want: &QualifiedType, got_ni: NodeIdx, cast_type:
             got_ni
         },
         TypeCast::Clone => panic!(),
+    }
+}
+
+/// Used when we widen a variable. The problem here is if you have 
+/// ```
+/// let mut a = 3
+/// ```
+/// Then a will end up being of type Int<3,3> which is not much use to anyone. So we widen to the closest type available.
+pub (crate) fn upcast_from_literal(t: &Type) -> Type {
+    match t {
+        Type::Int(lower_from, upper_from) => {
+            if lower_from == upper_from {
+                if *upper_from > U_64_MAX {
+                    t.clone()
+                } else if *upper_from > S_64_MAX {
+                    INT_U_64
+                } else if *upper_from > U_32_MAX {
+                    INT_S_64
+                } else if *upper_from > S_32_MAX {
+                    INT_U_32
+                } else if *upper_from > S_32_MIN {
+                    INT_S_32
+                } else if *upper_from > S_64_MIN {
+                    INT_S_64
+                } else {
+                    t.clone()
+                }
+            } else {
+                t.clone()
+            }
+        },
+        _ => t.clone()
     }
 }

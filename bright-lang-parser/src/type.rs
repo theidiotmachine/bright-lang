@@ -1,3 +1,4 @@
+use bright_lang_types::TraitDecl;
 use bright_lang_ast::TraitImpl;
 use bright_lang_types::UserStruct;
 use bright_lang_types::{Member, Privacy};
@@ -127,7 +128,7 @@ impl<'a> BrightParser<'a> {
                                 None => break,
                                 Some(lookahead_data) => {
                                     if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
-                                        //rhs := parse_expression_1 (rhs, lookahead's precedence)
+                                        //rhs := parse_expression_1 (rhs, look ahead's precedence)
                                         let new_rhs = self.parse_type_decl_constraint_1(&rhs, lookahead_data.precedence, parser_context);
                                         rhs = new_rhs;
                                         //lookahead := peek next token
@@ -462,5 +463,65 @@ impl<'a> BrightParser<'a> {
 
         //and register the type itself
         parser_context.type_map.insert(id, TypeDecl::Struct{user_struct: UserStruct{members: vec![]}, under_construction: false, export});
+    }
+
+    ///parse a `trait`, which is a reduced type class
+    pub (crate) fn parse_trait_decl(&mut self, 
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) {
+        self.skip_next_item();
+        let (id, _) = self.expect_ident(parser_context);
+        self.skip_next_item();
+     
+        let mut member_funcs = vec![];
+
+        self.expect_token(Token::SquigglyOpen, parser_context);
+
+        let mut next = self.peek_next_item();
+        let mut token = next.token;
+        let this_type = Type::VariableUsage{name: id.clone(), constraint: TypeConstraint::Trait(id.clone())};
+        parser_context.push_trait_type_scope(&TypeArg{name: id.clone(), constraint: TypeConstraint::Trait(id.clone())});
+
+        while token != Token::SquigglyClose {
+            if token == Token::EOF {
+                parser_context.push_err(Error::UnexpectedEoF(next.loc, String::from("'}'")));
+                break;
+            }
+
+            match token {
+                Token::Fn => {
+                    let mf = self.parse_trait_func_decl_header(&QualifiedType::new_const(&this_type), &id, parser_context);
+                    member_funcs.push(mf);
+                },
+                Token::Mut => {
+                    self.skip_next_item();
+                    next = self.peek_next_item();
+                    token = next.token;
+                    match token {
+                        Token::Fn => {
+                            let mf = self.parse_trait_func_decl_header(&QualifiedType::new_mut(&this_type), &id, parser_context);
+                            member_funcs.push(mf);
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.loc, "fn".to_owned(), next.to_string()));
+                            self.skip_next_item();
+                        }
+                    }
+                },
+                _ => {
+                    parser_context.push_err(Error::UnexpectedToken(next.loc, "'mut' or 'fn'".to_owned(), next.to_string()));
+                    self.skip_next_item();
+                }
+            }
+
+            next = self.peek_next_item();
+            token = next.token;
+        }
+
+        self.skip_next_item();
+        parser_context.pop_type_scope();
+
+        parser_context.trait_map.insert(id.clone(), TraitDecl{name: id, member_funcs});
     }
 }

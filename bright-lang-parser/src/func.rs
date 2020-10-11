@@ -1,3 +1,4 @@
+use bright_lang_types::TraitMemberFunc;
 use bright_lang_ast::expr::FuncObjectCreation;
 use bright_lang_ast::expr::Expr;
 use bright_lang_ast::expr::TypedExpr;
@@ -187,13 +188,60 @@ impl<'a> BrightParser<'a> {
         }
     }
 
+    ///Very simple function for parsing trait member function headers. Does not deal with constructors, anon functions or a bazillion other things.
+    pub (crate) fn parse_trait_func_decl_header(&mut self,
+        this_type: &QualifiedType,
+        trait_name: &str,
+        parser_context: &mut ParserContext,
+    ) -> TraitMemberFunc {
+        self.expect_token(Token::Fn, parser_context);
+
+        let (name, _) = self.expect_ident(parser_context);
+        self.skip_next_item();
+
+        //type args
+        let next = self.peek_next_item();
+        let token = next.token;
+        let type_args = if token == Token::LessThan {
+            self.parse_type_decl_args(parser_context)
+        } else {
+            vec![]
+        };
+
+        //now get the args
+        let arg_list = self.parse_function_decl_args(
+            &Some(this_type.clone()),
+            parser_context);
+
+        //and the return type
+        let next = self.peek_next_item();
+        let token = next.token;
+        let return_type = if token == Token::ThinArrow {
+            self.skip_next_item();
+            self.parse_qualified_type(parser_context)
+        } else {
+            parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("'->'"), next.to_string()));
+            self.skip_next_item();
+            QualifiedType::new(&Type::Undeclared, Mutability::Unknown)
+        };
+
+        let mut in_types = vec![];
+        for arg in arg_list {
+            in_types.push(arg.r#type)
+        }
+
+        TraitMemberFunc{
+            name, func_type: FuncType{out_type: return_type, in_types}, type_args, trait_name: trait_name.to_owned()
+        }
+    }
+
     ///The core of the function parsing code.
     fn parse_func_decl_internal(&mut self,
         export: bool,
         phase: ParserPhase,
         prefix: &str,
         this_type: &Option<Type>,
-        this_type_args: &Vec<TypeArg>,
+        this_type_args: &[TypeArg],
         func_decl_context: FuncDeclContext,
         arena: &mut Arena,
         parser_func_context_outer: &mut ParserFuncContext,
@@ -245,14 +293,14 @@ impl<'a> BrightParser<'a> {
                 let mut type_args = parser_context.push_type_scope(&type_args);
                 type_scope_pushed = true;
                 generic = true;
-                let mut o = this_type_args.clone();
+                let mut o = this_type_args.to_owned();
                 o.append(& mut type_args);
                 o
             } else {
                 if num_this_type_args > 0 {
                     generic = true;
                 }
-                this_type_args.clone()
+                this_type_args.to_owned()
             }
         };
 
@@ -354,6 +402,6 @@ impl<'a> BrightParser<'a> {
         parser_func_context_outer: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Option<NodeIdx> {
-        self.parse_func_decl_internal(export, ParserPhase::MainPhase, &String::from(""), &None, &vec![], FuncDeclContext::Global, arena, parser_func_context_outer, parser_context).0
+        self.parse_func_decl_internal(export, ParserPhase::MainPhase, &String::from(""), &None, &[], FuncDeclContext::Global, arena, parser_func_context_outer, parser_context).0
     }
 }

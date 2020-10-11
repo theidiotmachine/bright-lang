@@ -15,6 +15,11 @@ pub const U_32_MAX: i128 = 4_294_967_295;
 //FIXME64BIT
 pub const PTR_MAX: i128 = 4_294_967_295;
 
+pub const INT_S_64: Type = Type::Int(S_64_MIN, S_64_MAX);
+pub const INT_S_32: Type = Type::Int(S_32_MIN, S_32_MAX);
+pub const INT_U_64: Type = Type::Int(0, U_64_MAX);
+pub const INT_U_32: Type = Type::Int(0, U_32_MAX);
+
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub enum TypeConstraint{
     ///A union of constraints. Means at least one of these are true. If a union of traits, means at least 
@@ -128,6 +133,8 @@ pub enum Type {
     Never,
     ///f64 number
     Number,
+    ///Fixed size managed array
+    StaticArray(Box<Type>),
     ///string
     String,
     /// string literal
@@ -178,6 +185,7 @@ impl Type{
             Type::Never => String::from("Never"),
             Type::Number => String::from("Number"),
             Type::ModuleLiteral(_) => String::from("ModuleLiteral"),
+            Type::StaticArray(_) => String::from("StaticArray"),
             Type::String => String::from("String"),
             Type::StringLiteral(_) => String::from("StringLiteral"),
             Type::Tuple(_) => String::from("Tuple"),
@@ -200,20 +208,57 @@ impl Type{
             Type::Bool | Type::FloatLiteral(_) | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never 
                 | Type::Number | Type::Void | Type::TypeLiteral(_) | Type::Undeclared 
                 => PassStyle::SimpleValue,
-            Type::String | Type::StringLiteral(_) => PassStyle::Value,
+            Type::String | Type::StringLiteral(_) => PassStyle::DeepCopy,
             Type::Tuple(inners) => {
-                inners.iter().fold(PassStyle::Value, |acc, x| {
+                inners.iter().fold(PassStyle::SimpleValue, |acc, x| {
                     match x.get_pass_style() {
-                        PassStyle::Value | PassStyle::SimpleValue => acc,
-                        PassStyle::Reference | PassStyle::ValueHoldingReference => PassStyle::ValueHoldingReference,
+                        PassStyle::SimpleValue => acc,
+                        PassStyle::Reference => if acc == PassStyle::DeepCopy || acc == PassStyle::DeepCopyHoldingReference {
+                            //not really holding a reference - this is to show it's both deep copy and a ref
+                            PassStyle::DeepCopyHoldingReference
+                        } else {
+                            PassStyle::DeepCopy
+                        },
+                        PassStyle::DeepCopy => if acc == PassStyle::Reference || acc == PassStyle::DeepCopyHoldingReference {
+                            //as above
+                            PassStyle::DeepCopyHoldingReference
+                        } else {
+                            PassStyle::DeepCopy
+                        },
                         PassStyle::Unknown => PassStyle::Unknown,
+                        PassStyle::DeepCopyHoldingReference => PassStyle::DeepCopyHoldingReference,
                     }
                 })
             },
             Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
+            Type::StaticArray(inner) => {
+                let inner_pass_style = inner.get_pass_style();
+                if inner_pass_style == PassStyle::Reference || inner_pass_style == PassStyle::DeepCopyHoldingReference {
+                    PassStyle::DeepCopyHoldingReference
+                } else {
+                    PassStyle::DeepCopy
+                }
+            }, 
             Type::UnsafeArray(_) | Type::UnsafeStruct{name: _} => PassStyle::Reference,
             Type::UnsafePtr => PassStyle::Reference, //strictly wrong - the pointer is by value, but a pointer is pointing to something 
-            Type::UserClass{name: _, type_args: _} => PassStyle::Value,
+            Type::UserClass{name: _, type_args: _} => unimplemented!(),
+        }
+    }
+
+    ///Is this an unresolved type variable?
+    pub fn is_type_variable(&self) -> bool {
+        match &self {
+            Type::Enum{name: _, type_args} | Type::EnumMember{enum_name: _, member_name: _, enum_type_args: type_args} => type_args.iter().any(|t| t.is_type_variable()),
+            Type::Bool | Type::Void | Type::FloatLiteral(_) | Type::Int(_, _)
+                | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::String | Type::StringLiteral(_) | Type::Undeclared 
+                | Type::Unknown | Type::UnsafePtr | Type::UnsafeStruct{name:_} 
+                    => false,
+            Type::UnsafeArray(t) | Type::StaticArray(t) => t.is_type_variable(),
+            Type::TypeLiteral(t) => t.r#type.is_type_variable(),
+            Type::Func{func_type: ft} => ft.out_type.r#type.is_type_variable() || ft.in_types.iter().any(|t| t.r#type.is_type_variable()),
+            Type::UserClass{name:_, type_args: ts} => ts.iter().any(|t| t.is_type_variable()),
+            Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
+            Type::VariableUsage{name: _, constraint: _} => true,
         }
     }
 }
@@ -230,6 +275,7 @@ impl Display for Type {
             Type::ModuleLiteral(n) => write!(f, "module: {}", n),
             Type::Never => write!(f, "Never"),
             Type::Number => write!(f, "Number"),
+            Type::StaticArray(t) => write!(f, "StaticArray<{}>", t),
             Type::String => write!(f, "String"),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
             Type::Tuple(types) => write!(f, "Tuple<{}>", Type::display_types(types)),
@@ -270,14 +316,14 @@ impl Display for Mutability {
 ///How a type is passed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub enum PassStyle{
-    ///Passed by value. May be true pass by value (e.g. tuples) or synthetic pass by value (e.g. arrays)
-    Value,
     ///Passed by value with no changeable internal components. Ints, bools, numbers.
     SimpleValue,
     ///Passed by reference. Obviously we pass a pointer through for these.
     Reference,
-    ///This is data passed by value that holds data to be passed by reference. An example might be an array holding a ref class.
-    ValueHoldingReference,
+    ///Needs a deep copy
+    DeepCopy,
+    ///Needs a deep copy, and because it holds a reference, can't be const casted
+    DeepCopyHoldingReference,
     ///We can't tell what the pass style is. We assume the worst.
     Unknown,
 }
