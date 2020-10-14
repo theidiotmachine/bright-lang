@@ -1,3 +1,5 @@
+use bright_lang_types::StaticMemberFunc;
+use bright_lang_types::MemberFunc;
 use bright_lang_types::UserClass;
 use crate::ParserPhase;
 use bright_lang_types::TraitDecl;
@@ -519,12 +521,12 @@ impl<'a> BrightParser<'a> {
                 privacy = Privacy::Private;
             }
             var = true;
-            next = self.next_item();
+            self.skip_next_item();
         } else if privacy == Privacy::Unresolved {
             privacy = Privacy::Public;
         }
         
-        let (id, id_loc) = self.expect_ident(parser_context);
+        let (id, _) = self.expect_ident(parser_context);
         self.expect_token(Token::Colon, parser_context);
         let t = self.parse_qualified_type(parser_context);
         Member{var, privacy, name: id, r#type: t}
@@ -550,6 +552,43 @@ impl<'a> BrightParser<'a> {
                     self.skip_next_item();
                 }
             }
+        }
+    }
+
+    fn parse_class_body(&mut self,
+        export: bool, 
+        phase: ParserPhase,
+        name: &str,
+        this_type: &Type,
+        this_type_args: &[TypeArg],
+        parser_context: &mut ParserContext,
+    ) {
+        self.expect_token(Token::SquigglyOpen, parser_context);
+
+        let prefix = format!("!{}__", name);
+        let mut member_funcs: Vec<MemberFunc> = vec![];
+        let mut static_member_funcs: Vec<StaticMemberFunc> = vec![];
+
+        let mut next = self.peek_next_item();
+        while next.token != Token::SquigglyClose {
+            if next.token == Token::EOF {
+                parser_context.push_err(Error::UnexpectedEoF(next.loc, String::from("expecting '}'")));
+                break;
+            }
+
+            match next.token {
+                Token::Fn => {
+                    let mf = self.parse_member_function_decl(&prefix, &this_type, &this_type_args, Privacy::Public, export, phase, parser_context);
+                    parser_context.append_type_decl_member_func(&name, &mf);
+                    member_funcs.push(mf);
+                },
+                Token::Shared => unimplemented!(),
+                _ => {
+                    self.skip_next_item();
+                    parser_context.push_err(Error::UnexpectedToken(next.loc, String::from("'}', fn or shared"), next.to_string()));
+                }
+            }
+            next = self.peek_next_item();
         }
     }
 
@@ -591,16 +630,25 @@ impl<'a> BrightParser<'a> {
 
         if next.token == Token::RoundOpen {
             let mut user_class = UserClass{
-                type_args, member_funcs: vec![], members: vec![], static_member_funcs: vec![], storage: user_class_storage
+                type_args: type_args.clone(), member_funcs: vec![], members: vec![], static_member_funcs: vec![], storage: user_class_storage
             };
             parser_context.type_map.insert(id.clone(), TypeDecl::UserClass{export, under_construction: true, user_class: user_class.clone()});
             let members = self.parse_class_members(parser_context);
             user_class.members = members;
-            parser_context.type_map.insert(id, TypeDecl::UserClass{export, under_construction: true, user_class});
+            parser_context.type_map.insert(id.clone(), TypeDecl::UserClass{export, under_construction: true, user_class});
+            let user_type = Type::UserClass{name: id.clone(), type_args:
+                type_args.iter().map(|type_arg| Type::VariableUsage{name: type_arg.name.clone(), constraint: type_arg.constraint.clone()}).collect(),
+            };
+            self.parse_class_body(export, phase, &id, &user_type, &type_args, parser_context);
+            parser_context.finish_type_decl(&id);
         } else if next.token == Token::Implements {
 
         } else {
             parser_context.push_err(Error::UnexpectedToken(next.loc, "members or 'implements'".to_owned(), next.to_string()));
+        }
+
+        if generic {
+            parser_context.pop_type_scope();
         }
     }
 }

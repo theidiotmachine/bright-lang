@@ -432,14 +432,22 @@ impl ParserContext {
         self.type_map.get(name).cloned()
     }
 
-    fn append_type_decl_member_func(&mut self, type_name: &str, mf: &MemberFunc) {
+    pub (crate) fn append_type_decl_member_func(&mut self, type_name: &str, mf: &MemberFunc) {
         let td = self.type_map.get_mut(type_name).unwrap();
         match td {
-            /*
-            TypeDecl::Type{inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: _} => {
-                member_funcs.push(mf.clone());
+            TypeDecl::UserClass{export: _, under_construction: _, ref mut user_class} => {
+                user_class.member_funcs.push(mf.clone());
             },
-            */
+            _ => unimplemented!()
+        }
+    }
+
+    pub (crate) fn finish_type_decl(&mut self, type_name: &str) {
+        let td = self.type_map.get_mut(type_name).unwrap();
+        match td {
+            TypeDecl::UserClass{export: _, ref mut under_construction, user_class: _} => {
+                *under_construction = false;
+            },
             _ => unimplemented!()
         }
     }

@@ -1,3 +1,5 @@
+use bright_lang_types::MemberFunc;
+use bright_lang_types::Privacy;
 use bright_lang_types::TraitMemberFunc;
 use bright_lang_ast::expr::FuncObjectCreation;
 use bright_lang_ast::expr::Expr;
@@ -235,6 +237,20 @@ impl<'a> BrightParser<'a> {
         }
     }
 
+    pub(crate) fn parse_member_function_decl(&mut self, 
+        prefix: &String,
+        this_type: &Type,
+        this_type_args: &[TypeArg],
+        privacy: Privacy,
+        export: bool,
+        phase: ParserPhase,
+        parser_context: &mut ParserContext,
+    ) -> MemberFunc {
+        let mut fake_parser_func_context = ParserFuncContext::new(&None);
+        let (_, mangled_name, name, type_args, func_type) = self.parse_func_decl_internal(export, phase, prefix, &Some(this_type.clone()), this_type_args, FuncDeclContext::MemberFn, None, &mut fake_parser_func_context, parser_context);
+        MemberFunc{mangled_name, type_args, func_type, name, privacy}
+    }
+
     ///The core of the function parsing code.
     fn parse_func_decl_internal(&mut self,
         export: bool,
@@ -243,7 +259,7 @@ impl<'a> BrightParser<'a> {
         this_type: &Option<Type>,
         this_type_args: &[TypeArg],
         func_decl_context: FuncDeclContext,
-        arena: &mut Arena,
+        o_arena: Option<&mut Arena>,
         parser_func_context_outer: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> (Option<NodeIdx>, String, String, Vec<TypeArg>, FuncType) {
@@ -386,11 +402,14 @@ impl<'a> BrightParser<'a> {
             let func_type = func.defn.get_func_type();
             parser_context.func_decls.push(func); 
             (
-                Some(arena.push(TypedExpr::new(
-                    &Expr::FuncDecl(FuncObjectCreation{name: mangled_name.clone(), closure: func_closure}), 
-                    &QualifiedType::new_const(&Type::Func{func_type: Box::new(func_type.clone())}), 
-                    loc
-                ))),
+                match o_arena {
+                    Some(arena) => Some(arena.push(TypedExpr::new(
+                        &Expr::FuncDecl(FuncObjectCreation{name: mangled_name.clone(), closure: func_closure}), 
+                        &QualifiedType::new_const(&Type::Func{func_type: Box::new(func_type.clone())}), 
+                        loc
+                    ))),
+                    _ => None
+                },
                 mangled_name, name, vec![], func_type
             )
         }
@@ -402,6 +421,6 @@ impl<'a> BrightParser<'a> {
         parser_func_context_outer: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Option<NodeIdx> {
-        self.parse_func_decl_internal(export, ParserPhase::MainPhase, &String::from(""), &None, &[], FuncDeclContext::Global, arena, parser_func_context_outer, parser_context).0
+        self.parse_func_decl_internal(export, ParserPhase::MainPhase, &String::from(""), &None, &[], FuncDeclContext::Global, Some(arena), parser_func_context_outer, parser_context).0
     }
 }
